@@ -27,3 +27,22 @@ def add_configs(olo_tb):
         named_config(tb, {'RdLatency_g': ReadLatency})
     for Width in [8, 16, 32, 64]:
         named_config(tb, {'Width_g': Width})
+
+    ### olo_ft_ram_sdp ###
+    tb = olo_tb.test_bench('olo_ft_ram_sdp_tb')
+    for RamBehav in ['RBW', 'WBR']:
+        for Async in [True, False]:
+            named_config(tb, {'RamBehavior_g': RamBehav, 'IsAsync_g': Async})
+    for ReadLatency in [1, 2]:
+        named_config(tb, {'RdLatency_g': ReadLatency})
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
+
+    ### olo_ft_ram_sp ###
+    tb = olo_tb.test_bench('olo_ft_ram_sp_tb')
+    for RamBehav in ['RBW', 'WBR']:
+        named_config(tb, {'RamBehavior_g': RamBehav})
+    for ReadLatency in [1, 2]:
+        named_config(tb, {'RdLatency_g': ReadLatency})
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})

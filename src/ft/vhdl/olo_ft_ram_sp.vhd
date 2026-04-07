@@ -1,0 +1,104 @@
+---------------------------------------------------------------------------------------------------
+-- Copyright (c) 2025 by Oliver Bruendler
+-- Authors: Oliver Bruendler
+---------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------
+-- Description
+---------------------------------------------------------------------------------------------------
+-- ECC-protected single port RAM using SECDED (Single Error Correction,
+-- Double Error Detection) Hamming code. Wraps olo_base_ram_sp with a wider
+-- internal word to store parity bits alongside data. The ECC is transparent
+-- to the user: data is encoded on write and decoded/corrected on read.
+--
+-- Documentation:
+-- https://github.com/open-logic/open-logic/blob/main/doc/ft/olo_ft_ram_sp.md
+--
+-- Note: The link points to the documentation of the latest release. If you
+--       use an older version, the documentation might not match the code.
+
+---------------------------------------------------------------------------------------------------
+-- Libraries
+---------------------------------------------------------------------------------------------------
+library ieee;
+    use ieee.std_logic_1164.all;
+    use ieee.numeric_std.all;
+
+library work;
+    use work.olo_base_pkg_math.all;
+    use work.olo_ft_pkg_ecc.all;
+
+---------------------------------------------------------------------------------------------------
+-- Entity
+---------------------------------------------------------------------------------------------------
+entity olo_ft_ram_sp is
+    generic (
+        Depth_g       : positive;
+        Width_g       : positive;
+        RdLatency_g   : positive := 1;
+        RamStyle_g    : string   := "auto";
+        RamBehavior_g : string   := "RBW"
+    );
+    port (
+        Clk          : in    std_logic;
+        Addr         : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        WrEna        : in    std_logic                               := '1';
+        WrData       : in    std_logic_vector(Width_g - 1 downto 0);
+        WrEccBitFlip : in    std_logic_vector(1 downto 0)            := "00";
+        RdData       : out   std_logic_vector(Width_g - 1 downto 0);
+        RdSecErr     : out   std_logic;
+        RdDedErr     : out   std_logic
+    );
+end entity;
+
+---------------------------------------------------------------------------------------------------
+-- Architecture
+---------------------------------------------------------------------------------------------------
+architecture rtl of olo_ft_ram_sp is
+
+    -- ECC constants
+    constant ParityBits_c    : positive := eccParityBits(Width_g);
+    constant CodewordWidth_c : positive := eccCodewordWidth(Width_g);
+
+    -- Write-side signals
+    signal Wr_Encoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal Wr_Injected : std_logic_vector(CodewordWidth_c - 1 downto 0);
+
+    -- Read-side signals
+    signal Rd_Encoded : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal Rd_SynPar  : std_logic_vector(ParityBits_c downto 0);
+
+begin
+
+    -- Encode write data
+    Wr_Encoded <= eccEncode(WrData);
+
+    -- Error injection (flip codeword bits for testing / BIST)
+    Wr_Injected(CodewordWidth_c - 1 downto 2) <= Wr_Encoded(CodewordWidth_c - 1 downto 2);
+    Wr_Injected(1)                             <= Wr_Encoded(1) xor WrEccBitFlip(1);
+    Wr_Injected(0)                             <= Wr_Encoded(0) xor WrEccBitFlip(0);
+
+    -- Internal RAM with wider codeword width
+    i_ram : entity work.olo_base_ram_sp
+        generic map (
+            Depth_g       => Depth_g,
+            Width_g       => CodewordWidth_c,
+            RdLatency_g   => RdLatency_g,
+            RamStyle_g    => RamStyle_g,
+            RamBehavior_g => RamBehavior_g
+        )
+        port map (
+            Clk    => Clk,
+            Addr   => Addr,
+            WrEna  => WrEna,
+            WrData => Wr_Injected,
+            RdData => Rd_Encoded
+        );
+
+    -- Decode read data
+    Rd_SynPar <= eccSyndromeAndParity(Rd_Encoded, Width_g);
+    RdData    <= eccCorrectData(Rd_Encoded, Rd_SynPar, Width_g);
+    RdSecErr  <= eccSecError(Rd_SynPar);
+    RdDedErr  <= eccDedError(Rd_SynPar);
+
+end architecture;
