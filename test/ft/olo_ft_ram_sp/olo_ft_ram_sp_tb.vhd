@@ -27,7 +27,8 @@ entity olo_ft_ram_sp_tb is
         runner_cfg    : string;
         Width_g       : positive range 5 to 128 := 32;
         RamBehavior_g : string                  := "RBW";
-        RdLatency_g   : positive range 1 to 2   := 1
+        RdLatency_g   : positive range 1 to 2   := 1;
+        EccPipeline_g : natural range 0 to 1    := 0
     );
 end entity;
 
@@ -98,7 +99,7 @@ architecture sim of olo_ft_ram_sp_tb is
         wait until rising_edge(Clk); -- Address sampled
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g loop
+        for i in 1 to RdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -122,7 +123,7 @@ architecture sim of olo_ft_ram_sp_tb is
         wait until rising_edge(Clk); -- Address sampled
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g loop
+        for i in 1 to RdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -152,7 +153,8 @@ begin
             Depth_g       => 200,
             Width_g       => Width_g,
             RamBehavior_g => RamBehavior_g,
-            RdLatency_g   => RdLatency_g
+            RdLatency_g   => RdLatency_g,
+            EccPipeline_g => EccPipeline_g
         )
         port map (
             Clk          => Clk,

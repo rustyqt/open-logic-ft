@@ -27,6 +27,8 @@ def add_configs(olo_tb):
         named_config(tb, {'RdLatency_g': ReadLatency})
     for Width in [8, 16, 32, 64]:
         named_config(tb, {'Width_g': Width})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
 
     ### olo_ft_ram_sdp ###
     tb = olo_tb.test_bench('olo_ft_ram_sdp_tb')
@@ -37,6 +39,8 @@ def add_configs(olo_tb):
         named_config(tb, {'RdLatency_g': ReadLatency})
     for Width in [8, 16, 32, 64]:
         named_config(tb, {'Width_g': Width})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
 
     ### olo_ft_ram_sp ###
     tb = olo_tb.test_bench('olo_ft_ram_sp_tb')
@@ -46,3 +50,5 @@ def add_configs(olo_tb):
         named_config(tb, {'RdLatency_g': ReadLatency})
     for Width in [8, 16, 32, 64]:
         named_config(tb, {'Width_g': Width})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})

@@ -26,6 +26,7 @@ library ieee;
 
 library work;
     use work.olo_base_pkg_math.all;
+    use work.olo_base_pkg_attribute.all;
     use work.olo_ft_pkg_ecc.all;
 
 ---------------------------------------------------------------------------------------------------
@@ -37,7 +38,8 @@ entity olo_ft_ram_tdp is
         Width_g       : positive;
         RdLatency_g   : positive := 1;
         RamStyle_g    : string   := "auto";
-        RamBehavior_g : string   := "RBW"
+        RamBehavior_g : string   := "RBW";
+        EccPipeline_g : natural  := 0
     );
     port (
         A_Clk          : in    std_logic;
@@ -73,12 +75,18 @@ architecture rtl of olo_ft_ram_tdp is
     signal A_WrInjected : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal A_RdEncoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal A_SynPar     : std_logic_vector(ParityBits_c downto 0);
+    signal A_DataCorr   : std_logic_vector(Width_g - 1 downto 0);
+    signal A_SecErrI    : std_logic;
+    signal A_DedErrI    : std_logic;
 
     -- Port B signals
     signal B_WrEncoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal B_WrInjected : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal B_RdEncoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal B_SynPar     : std_logic_vector(ParityBits_c downto 0);
+    signal B_DataCorr   : std_logic_vector(Width_g - 1 downto 0);
+    signal B_SecErrI    : std_logic;
+    signal B_DedErrI    : std_logic;
 
 begin
 
@@ -117,15 +125,72 @@ begin
             B_RdData => B_RdEncoded
         );
 
-    -- Decode read data - compute syndrome/parity once, reuse for data and flags
-    A_SynPar   <= eccSyndromeAndParity(A_RdEncoded, Width_g);
-    A_RdData   <= eccCorrectData(A_RdEncoded, A_SynPar, Width_g);
-    A_RdSecErr <= eccSecError(A_SynPar);
-    A_RdDedErr <= eccDedError(A_SynPar);
+    -- Decode read data - compute syndrome/parity once, reuse for data and flags (combinational)
+    A_SynPar  <= eccSyndromeAndParity(A_RdEncoded, Width_g);
+    A_DataCorr <= eccCorrectData(A_RdEncoded, A_SynPar, Width_g);
+    A_SecErrI <= eccSecError(A_SynPar);
+    A_DedErrI <= eccDedError(A_SynPar);
 
-    B_SynPar   <= eccSyndromeAndParity(B_RdEncoded, Width_g);
-    B_RdData   <= eccCorrectData(B_RdEncoded, B_SynPar, Width_g);
-    B_RdSecErr <= eccSecError(B_SynPar);
-    B_RdDedErr <= eccDedError(B_SynPar);
+    B_SynPar  <= eccSyndromeAndParity(B_RdEncoded, Width_g);
+    B_DataCorr <= eccCorrectData(B_RdEncoded, B_SynPar, Width_g);
+    B_SecErrI <= eccSecError(B_SynPar);
+    B_DedErrI <= eccDedError(B_SynPar);
+
+    -- No ECC pipeline: direct output
+    g_no_ecc_pipe : if EccPipeline_g = 0 generate
+        A_RdData   <= A_DataCorr;
+        A_RdSecErr <= A_SecErrI;
+        A_RdDedErr <= A_DedErrI;
+        B_RdData   <= B_DataCorr;
+        B_RdSecErr <= B_SecErrI;
+        B_RdDedErr <= B_DedErrI;
+    end generate;
+
+    -- ECC pipeline: register stages after decode
+    g_ecc_pipe : if EccPipeline_g > 0 generate
+        type Data_t is array (natural range <>) of std_logic_vector(Width_g - 1 downto 0);
+        signal A_DataPipe   : Data_t(1 to EccPipeline_g);
+        signal A_SecErrPipe : std_logic_vector(1 to EccPipeline_g);
+        signal A_DedErrPipe : std_logic_vector(1 to EccPipeline_g);
+        signal B_DataPipe   : Data_t(1 to EccPipeline_g);
+        signal B_SecErrPipe : std_logic_vector(1 to EccPipeline_g);
+        signal B_DedErrPipe : std_logic_vector(1 to EccPipeline_g);
+        attribute shreg_extract of A_DataPipe   : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of A_SecErrPipe : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of A_DedErrPipe : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of B_DataPipe   : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of B_SecErrPipe : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of B_DedErrPipe : signal is ShregExtract_SuppressExtraction_c;
+    begin
+        p_ecc_pipe_a : process (A_Clk) is
+        begin
+            if rising_edge(A_Clk) then
+                A_DataPipe(1)   <= A_DataCorr;
+                A_SecErrPipe(1) <= A_SecErrI;
+                A_DedErrPipe(1) <= A_DedErrI;
+                A_DataPipe(2 to EccPipeline_g)   <= A_DataPipe(1 to EccPipeline_g - 1);
+                A_SecErrPipe(2 to EccPipeline_g) <= A_SecErrPipe(1 to EccPipeline_g - 1);
+                A_DedErrPipe(2 to EccPipeline_g) <= A_DedErrPipe(1 to EccPipeline_g - 1);
+            end if;
+        end process;
+        A_RdData   <= A_DataPipe(EccPipeline_g);
+        A_RdSecErr <= A_SecErrPipe(EccPipeline_g);
+        A_RdDedErr <= A_DedErrPipe(EccPipeline_g);
+
+        p_ecc_pipe_b : process (B_Clk) is
+        begin
+            if rising_edge(B_Clk) then
+                B_DataPipe(1)   <= B_DataCorr;
+                B_SecErrPipe(1) <= B_SecErrI;
+                B_DedErrPipe(1) <= B_DedErrI;
+                B_DataPipe(2 to EccPipeline_g)   <= B_DataPipe(1 to EccPipeline_g - 1);
+                B_SecErrPipe(2 to EccPipeline_g) <= B_SecErrPipe(1 to EccPipeline_g - 1);
+                B_DedErrPipe(2 to EccPipeline_g) <= B_DedErrPipe(1 to EccPipeline_g - 1);
+            end if;
+        end process;
+        B_RdData   <= B_DataPipe(EccPipeline_g);
+        B_RdSecErr <= B_SecErrPipe(EccPipeline_g);
+        B_RdDedErr <= B_DedErrPipe(EccPipeline_g);
+    end generate;
 
 end architecture;

@@ -26,9 +26,10 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Depth_g       | positive | -       | Number of addresses the RAM has                              |
 | Width_g       | positive | -       | Number of data bits stored per address (word-width). The internal RAM is wider to accommodate ECC parity bits. |
 | IsAsync_g     | boolean  | false   | When _true_, the read port runs on a separate clock (_Rd_Clk_). |
-| RdLatency_g   | positive | 1       | Read latency. Higher values can help close timing.           |
+| RdLatency_g   | positive | 1       | Read latency inside the RAM. Higher values can help close timing. |
 | RamStyle_g    | string   | "auto"  | Controls the RAM implementation resource. Passed through to [olo_base_ram_sdp](../base/olo_base_ram_sdp.md). |
 | RamBehavior_g | string   | "RBW"   | Controls the RAM behavior. <br>"RBW": Read-before-write<br>"WBR": Write-before-read |
+| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path. Total read latency becomes _RdLatency_g_ + _EccPipeline_g_. |
 
 ## Interfaces
 

@@ -26,9 +26,10 @@ space or high-energy physics environments.
 | :------------ | :------- | ------- | :----------------------------------------------------------- |
 | Depth_g       | positive | -       | Number of addresses the RAM has                              |
 | Width_g       | positive | -       | Number of data bits stored per address (word-width). The internal RAM is wider to accommodate ECC parity bits. |
-| RdLatency_g   | positive | 1       | Read latency. <br>1 is the behavior of a normal synchronous RAM.<br>Higher values can be desirable for timing-optimization. The ECC decode is combinational after the read pipeline, so increasing _RdLatency_g_ can help close timing. |
+| RdLatency_g   | positive | 1       | Read latency inside the RAM. <br>1 is the behavior of a normal synchronous RAM.<br>Higher values can be desirable for timing-optimization. |
 | RamStyle_g    | string   | "auto"  | Controls the RAM implementation resource. Passed through to [olo_base_ram_tdp](../base/olo_base_ram_tdp.md). |
 | RamBehavior_g | string   | "RBW"   | Controls the RAM behavior. <br>"RBW": Read-before-write<br>"WBR": Write-before-read |
+| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path after ECC correction. Total read latency becomes _RdLatency_g_ + _EccPipeline_g_. |
 
 ## Interfaces
 
@@ -64,12 +65,16 @@ space or high-energy physics environments.
 
 ```
 Write path:  WrData -> eccEncode -> XOR bit-flip injection -> wider internal RAM
-Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + SecErr/DedErr
+Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + SecErr/DedErr -> [optional ECC pipeline]
 ```
 
 The ECC encoding is combinational on the write path. The internal RAM (an instance of _olo_base_ram_tdp_ with wider
 word) provides the configurable read pipeline (_RdLatency_g_). The ECC decoding is combinational after the read
 pipeline, so the error flags are time-aligned with the read data.
+
+When _EccPipeline_g_ > 0, additional register stages are inserted after the ECC decode logic. This breaks the
+combinational path between the RAM output and the corrected data output, which can help close timing at high clock
+frequencies. The total read latency becomes _RdLatency_g_ + _EccPipeline_g_ clock cycles.
 
 ### ECC Overhead
 
