@@ -52,3 +52,37 @@ def add_configs(olo_tb):
         named_config(tb, {'Width_g': Width})
     for EccPipeline in [0, 1]:
         named_config(tb, {'EccPipeline_g': EccPipeline})
+
+    ### olo_ft_fifo_sync ###
+    tb = olo_tb.test_bench('olo_ft_fifo_sync_tb')
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
+
+    ### olo_ft_fifo_async ###
+    tb = olo_tb.test_bench('olo_ft_fifo_async_tb')
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
+    for Opt in ['SPEED', 'LATENCY']:
+        named_config(tb, {'Optimization_g': Opt})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
+
+    ### olo_ft_fifo_packet ###
+    tb = olo_tb.test_bench('olo_ft_fifo_packet_tb')
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
+    for FeatureSet in ['FULL', 'DROP_ONLY']:
+        named_config(tb, {'FeatureSet_g': FeatureSet})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
+
+    ### olo_ft_ram_sp_scrub ###
+    tb = olo_tb.test_bench('olo_ft_ram_sp_scrub_tb')
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
+    for EccPipeline in [0, 1]:
+        named_config(tb, {'EccPipeline_g': EccPipeline})
+    for Mode in ['ON_ERROR', 'ALWAYS']:
+        named_config(tb, {'ScrubMode_g': Mode})
