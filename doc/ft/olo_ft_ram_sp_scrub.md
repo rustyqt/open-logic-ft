@@ -94,10 +94,10 @@ To issue accesses, the user logic must follow this sequence:
 ### Architecture
 
 ```
-                      ┌─────────────────┐
-   User Addr/      ┌──┤                 │
-   WrEna/WrData    │  │                 │
-                MUX───►│  olo_ft_ram_sp │
+                     ┌─────────────────┐
+   User Addr/     ┌──┤                 │
+   WrEna/WrData   │  │                 │
+              MUX───►│   olo_ft_ram_sp │
    Scrubber FSM ──┘  │                 │
    (Read/Write)      │                 │
                      └────┬────────────┘
@@ -148,9 +148,7 @@ intact so the user can detect the unfixable error on their next read.
 
 - The scrubber assumes user logic respects the Stop/Stopped handshake. Accesses issued while
   _Scrub_Stopped_ = '0' are ignored (the scrubber owns the bus).
-- _Scrub_PassDone_ is pulsed when the address counter wraps from _Depth_g_-1 back to 0,
-  including the case where the user holds _Scrub_Stop_=1 for an extended period spanning multiple
-  passes.
+- _Scrub_PassDone_ is pulsed when the address counter wraps from _Depth_g_-1 back to 0
 - The scrubber does not protect against double-bit errors (SECDED can detect but not correct).
   When the scrubber encounters a DED, it pulses _Scrub_DedErr_ and **leaves the memory contents
   unchanged** (no writeback) so the error remains detectable on subsequent reads.
