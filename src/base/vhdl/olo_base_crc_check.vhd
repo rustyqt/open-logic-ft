@@ -136,7 +136,7 @@ begin
                 end if;
 
             -- coverage off
-            when others => null; -- unreachable code
+            when others => v.Fsm := First_s; -- unreachable code, safe recovery
             -- coverage on
         end case;
 

@@ -379,7 +379,7 @@ begin
                             when I2cCmd_Send_c => v.Fsm := DataBit1_s;
                             when I2cCmd_Receive_c => v.Fsm := DataBit1_s;
                             -- coverage off
-                            when others => null; -- unreacable code
+                            when others => v.Fsm := BusIdle_s; -- unreachable code, safe recovery
                             -- coverage on
                         end case;
 
@@ -554,7 +554,7 @@ begin
                 v.SdaOut       := '1';
 
             -- coverage off
-            when others => null; -- unreacable code
+            when others => v.Fsm := BusIdle_s; -- unreachable code, safe recovery
             -- coverage on
         end case;
 

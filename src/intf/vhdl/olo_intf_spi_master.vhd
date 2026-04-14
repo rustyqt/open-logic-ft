@@ -245,7 +245,7 @@ begin
                 end if;
 
             -- coverage off
-            when others => null; -- unreachable code
+            when others => v.State := Idle_s; -- unreachable code, safe recovery
             -- coverage on
         end case;
 
