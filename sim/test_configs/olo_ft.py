@@ -95,3 +95,28 @@ def add_configs(olo_tb):
         named_config(tb, {'EccPipeline_g': EccPipeline})
     for Mode in ['ON_ERROR', 'ALWAYS']:
         named_config(tb, {'ScrubMode_g': Mode})
+
+    ### olo_ft_cc_pulse ###
+    tb = olo_tb.test_bench('olo_ft_cc_pulse_tb')
+    # Clock ratios within the valid range for the Fig. 14 pulse handshake.
+    # Design constraint: input pulse must return to zero before the feedback round-trip
+    # completes (approximately f_out < SyncStages_g * f_in).
+    for N, D in [(1, 1), (3, 2), (2, 3), (1, 5), (2, 5)]:
+        named_config(tb, {'ClockRatio_N_g': N, 'ClockRatio_D_g': D})
+    for Stages in [3, 4]:
+        named_config(tb, {'SyncStages_g': Stages})
+
+    ### olo_ft_cc_bits ###
+    tb = olo_tb.test_bench('olo_ft_cc_bits_tb')
+    # Same clock-ratio coverage as olo_base_cc_bits
+    for N, D in [(1, 1), (3, 2), (2, 3), (5, 1), (1, 5)]:
+        named_config(tb, {'ClockRatio_N_g': N, 'ClockRatio_D_g': D})
+    for Stages in [2, 3, 4]:
+        named_config(tb, {'SyncStages_g': Stages})
+
+    ### olo_ft_cc_reset ###
+    tb = olo_tb.test_bench('olo_ft_cc_reset_tb')
+    for N, D in [(1, 1), (3, 2), (2, 3), (5, 1), (1, 5)]:
+        named_config(tb, {'ClockRatio_N_g': N, 'ClockRatio_D_g': D})
+    for Stages in [2, 3, 4]:
+        named_config(tb, {'SyncStages_g': Stages})

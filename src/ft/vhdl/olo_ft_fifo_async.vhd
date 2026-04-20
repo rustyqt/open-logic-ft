@@ -119,7 +119,7 @@ begin
     In_Injected(1)                             <= In_Encoded(1) xor In_EccBitFlip(1);
     In_Injected(0)                             <= In_Encoded(0) xor In_EccBitFlip(0);
 
-    -- Base FIFO with wider codeword width
+    -- Base FIFO with wider codeword width, using TMR-hardened CDC primitives
     i_fifo : entity work.olo_base_fifo_async
         generic map (
             Width_g         => CodewordWidth_c,
@@ -132,7 +132,8 @@ begin
             RamBehavior_g   => RamBehavior_g,
             ReadyRstState_g => ReadyRstState_g,
             Optimization_g  => Optimization_g,
-            SyncStages_g    => SyncStages_g
+            SyncStages_g    => SyncStages_g,
+            FaultTolerant_g => true
         )
         port map (
             In_Clk      => In_Clk,
