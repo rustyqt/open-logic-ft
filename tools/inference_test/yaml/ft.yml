@@ -338,6 +338,54 @@ entities:
         out_reduce: { RdData: 128 }
 
   # ============================================================
+  # olo_ft_cc_pulse  (TMR-hardened pulse CDC, Li Fig. 14)
+  # ============================================================
+  - entity_name: "olo_ft_cc_pulse"
+    configurations:
+      - name: "n1-s3"
+        generics: { NumPulses_g: 1, SyncStages_g: 3 }
+      - name: "n1-s4"
+        generics: { NumPulses_g: 1, SyncStages_g: 4 }
+      - name: "n8-s3"
+        generics: { NumPulses_g: 8, SyncStages_g: 3 }
+      - name: "n8-s4"
+        generics: { NumPulses_g: 8, SyncStages_g: 4 }
+      - name: "n16-s3"
+        generics: { NumPulses_g: 16, SyncStages_g: 3 }
+      - name: "n32-s3"
+        generics: { NumPulses_g: 32, SyncStages_g: 3 }
+
+  # ============================================================
+  # olo_ft_cc_bits  (TMR-hardened level-signal CDC, Li Fig. 12)
+  # ============================================================
+  - entity_name: "olo_ft_cc_bits"
+    configurations:
+      - name: "w1-s2"
+        generics: { Width_g: 1, SyncStages_g: 2 }
+      - name: "w1-s4"
+        generics: { Width_g: 1, SyncStages_g: 4 }
+      - name: "w8-s2"
+        generics: { Width_g: 8, SyncStages_g: 2 }
+      - name: "w8-s4"
+        generics: { Width_g: 8, SyncStages_g: 4 }
+      - name: "w16-s2"
+        generics: { Width_g: 16, SyncStages_g: 2 }
+      - name: "w32-s2"
+        generics: { Width_g: 32, SyncStages_g: 2 }
+
+  # ============================================================
+  # olo_ft_cc_reset  (TMR-hardened reset CDC)
+  # ============================================================
+  - entity_name: "olo_ft_cc_reset"
+    configurations:
+      - name: "s2"
+        generics: { SyncStages_g: 2 }
+      - name: "s3"
+        generics: { SyncStages_g: 3 }
+      - name: "s4"
+        generics: { SyncStages_g: 4 }
+
+  # ============================================================
   # olo_ft_ram_sdp_scrub
   # ============================================================
   - entity_name: "olo_ft_ram_sdp_scrub"
