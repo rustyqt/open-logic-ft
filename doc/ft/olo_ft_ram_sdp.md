@@ -41,7 +41,7 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Wr_Addr       | in     | _ceil(log2(Depth_g))_ | -       | Write address                                                |
 | Wr_Ena        | in     | 1                     | '1'     | Write enable                                                 |
 | Wr_Data       | in     | _Width_g_             | -       | Write data                                                   |
-| Wr_EccBitFlip | in     | 2                     | "00"    | ECC error injection. "01" = single-bit error, "11" = double-bit error. See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
+| Wr_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
 
 ### Read Port
 
@@ -51,8 +51,8 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Rd_Addr   | in     | _ceil(log2(Depth_g))_ | -       | Read address                                                 |
 | Rd_Ena    | in     | 1                     | '1'     | Read enable                                                  |
 | Rd_Data   | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)     |
-| Rd_SecErr | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
-| Rd_DedErr | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
+| Rd_EccSec | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
+| Rd_EccDed | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
 
 ## Detailed Description
 

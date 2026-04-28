@@ -50,7 +50,7 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | Wr_Addr       | in     | _ceil(log2(Depth_g))_ | -       | Write address                                                |
 | Wr_Ena        | in     | 1                     | '0'    | Write enable                                                 |
 | Wr_Data       | in     | _Width_g_             | 0       | Write data                                                   |
-| Wr_EccBitFlip | in     | 2                     | "00"    | ECC error injection (test/BIST). See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
+| Wr_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 
 ### User Read Port
 
@@ -59,8 +59,8 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | Rd_Addr   | in     | _ceil(log2(Depth_g))_ | -       | Read address                                                 |
 | Rd_Ena    | in     | 1                     | '0'    | Read enable                                                  |
 | Rd_Data   | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)    |
-| Rd_SecErr | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
-| Rd_DedErr | out    | 1                     | N/A     | Double error detected flag (per read)                        |
+| Rd_EccSec | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
+| Rd_EccDed | out    | 1                     | N/A     | Double error detected flag (per read)                        |
 
 ### Scrubber Arbitration
 
@@ -75,8 +75,8 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | :------------- | :----- | :-------------------- | ------- | :----------------------------------------------------------- |
 | Scrub_Active   | out    | 1                     | N/A     | '1' while scrubber FSM is processing an address              |
 | Scrub_Addr     | out    | _ceil(log2(Depth_g))_ | N/A     | Current/most recent scrubbed address                         |
-| Scrub_SecErr   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a single-bit error            |
-| Scrub_DedErr   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a double-bit error            |
+| Scrub_EccSec   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a single-bit error            |
+| Scrub_EccDed   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a double-bit error            |
 | Scrub_PassDone | out    | 1                     | N/A     | Pulses '1' when scrubber completes a full memory pass        |
 
 ## Detailed Description
@@ -108,7 +108,7 @@ To issue accesses, the user logic must follow this sequence:
    (Read)            └────┬─────────────┘
                           │
                           ▼
-                   Rd_Data / Rd_SecErr / Rd_DedErr
+                   Rd_Data / Rd_EccSec / Rd_EccDed
                    → routed to user always
 ```
 
@@ -144,7 +144,7 @@ _Scrub_Stop_ is asserted mid-cycle. The scrubber yields only between R-M-W opera
 In **both** modes, the scrubber **never writes back when a DED is detected**. The decoded data
 on a double-bit error is unreliable (SECDED can detect but not correct double-bit errors), and
 writing it back would silently corrupt memory by replacing a detectable error with a "valid"
-codeword over wrong data. Instead, _Scrub_DedErr_ pulses and the corrupted memory is left
+codeword over wrong data. Instead, _Scrub_EccDed_ pulses and the corrupted memory is left
 intact so the user can detect the unfixable error on their next read.
 
 ### Constraints
@@ -154,5 +154,5 @@ intact so the user can detect the unfixable error on their next read.
 - `IsAsync_g` is not supported. The scrubber FSM requires both ports on the same clock domain.
 - _Scrub_PassDone_ is pulsed when the address counter wraps from _Depth_g_-1 back to 0.
 - The scrubber does not protect against double-bit errors (SECDED can detect but not correct).
-  When the scrubber encounters a DED, it pulses _Scrub_DedErr_ and **leaves the memory contents
+  When the scrubber encounters a DED, it pulses _Scrub_EccDed_ and **leaves the memory contents
   unchanged** (no writeback) so the error remains detectable on subsequent reads.

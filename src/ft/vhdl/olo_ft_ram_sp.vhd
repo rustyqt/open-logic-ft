@@ -46,10 +46,10 @@ entity olo_ft_ram_sp is
         Addr         : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         WrEna        : in    std_logic                               := '1';
         WrData       : in    std_logic_vector(Width_g - 1 downto 0);
-        WrEccBitFlip : in    std_logic_vector(1 downto 0)            := "00";
+        WrEccBitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
         RdData       : out   std_logic_vector(Width_g - 1 downto 0);
-        RdSecErr     : out   std_logic;
-        RdDedErr     : out   std_logic
+        RdEccSec     : out   std_logic;
+        RdEccDed     : out   std_logic
     );
 end entity;
 
@@ -70,18 +70,16 @@ architecture rtl of olo_ft_ram_sp is
     signal Rd_Encoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal Rd_SynPar   : std_logic_vector(ParityBits_c downto 0);
     signal Rd_DataCorr : std_logic_vector(Width_g - 1 downto 0);
-    signal Rd_SecErrI  : std_logic;
-    signal Rd_DedErrI  : std_logic;
+    signal Rd_EccSecI  : std_logic;
+    signal Rd_EccDedI  : std_logic;
 
 begin
 
     -- Encode write data
     Wr_Encoded <= eccEncode(WrData);
 
-    -- Error injection (flip codeword bits for testing / BIST)
-    Wr_Injected(CodewordWidth_c - 1 downto 2) <= Wr_Encoded(CodewordWidth_c - 1 downto 2);
-    Wr_Injected(1)                             <= Wr_Encoded(1) xor WrEccBitFlip(1);
-    Wr_Injected(0)                             <= Wr_Encoded(0) xor WrEccBitFlip(0);
+    -- Error injection (XOR full bit-flip pattern into the encoded codeword for testing / BIST)
+    Wr_Injected <= Wr_Encoded xor WrEccBitFlip;
 
     -- Internal RAM with wider codeword width
     i_ram : entity work.olo_base_ram_sp
@@ -103,40 +101,40 @@ begin
     -- Decode read data (combinational)
     Rd_SynPar  <= eccSyndromeAndParity(Rd_Encoded, Width_g);
     Rd_DataCorr <= eccCorrectData(Rd_Encoded, Rd_SynPar, Width_g);
-    Rd_SecErrI <= eccSecError(Rd_SynPar);
-    Rd_DedErrI <= eccDedError(Rd_SynPar);
+    Rd_EccSecI <= eccSecError(Rd_SynPar);
+    Rd_EccDedI <= eccDedError(Rd_SynPar);
 
     -- No ECC pipeline: direct output
     g_no_ecc_pipe : if EccPipeline_g = 0 generate
         RdData   <= Rd_DataCorr;
-        RdSecErr <= Rd_SecErrI;
-        RdDedErr <= Rd_DedErrI;
+        RdEccSec <= Rd_EccSecI;
+        RdEccDed <= Rd_EccDedI;
     end generate;
 
     -- ECC pipeline: register stages after decode
     g_ecc_pipe : if EccPipeline_g > 0 generate
         type Data_t is array (natural range <>) of std_logic_vector(Width_g - 1 downto 0);
         signal DataPipe   : Data_t(1 to EccPipeline_g);
-        signal SecErrPipe : std_logic_vector(1 to EccPipeline_g);
-        signal DedErrPipe : std_logic_vector(1 to EccPipeline_g);
+        signal EccSecPipe : std_logic_vector(1 to EccPipeline_g);
+        signal EccDedPipe : std_logic_vector(1 to EccPipeline_g);
         attribute shreg_extract of DataPipe   : signal is ShregExtract_SuppressExtraction_c;
-        attribute shreg_extract of SecErrPipe : signal is ShregExtract_SuppressExtraction_c;
-        attribute shreg_extract of DedErrPipe : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of EccSecPipe : signal is ShregExtract_SuppressExtraction_c;
+        attribute shreg_extract of EccDedPipe : signal is ShregExtract_SuppressExtraction_c;
     begin
         p_ecc_pipe : process (Clk) is
         begin
             if rising_edge(Clk) then
                 DataPipe(1)   <= Rd_DataCorr;
-                SecErrPipe(1) <= Rd_SecErrI;
-                DedErrPipe(1) <= Rd_DedErrI;
+                EccSecPipe(1) <= Rd_EccSecI;
+                EccDedPipe(1) <= Rd_EccDedI;
                 DataPipe(2 to EccPipeline_g)   <= DataPipe(1 to EccPipeline_g - 1);
-                SecErrPipe(2 to EccPipeline_g) <= SecErrPipe(1 to EccPipeline_g - 1);
-                DedErrPipe(2 to EccPipeline_g) <= DedErrPipe(1 to EccPipeline_g - 1);
+                EccSecPipe(2 to EccPipeline_g) <= EccSecPipe(1 to EccPipeline_g - 1);
+                EccDedPipe(2 to EccPipeline_g) <= EccDedPipe(1 to EccPipeline_g - 1);
             end if;
         end process;
         RdData   <= DataPipe(EccPipeline_g);
-        RdSecErr <= SecErrPipe(EccPipeline_g);
-        RdDedErr <= DedErrPipe(EccPipeline_g);
+        RdEccSec <= EccSecPipe(EccPipeline_g);
+        RdEccDed <= EccDedPipe(EccPipeline_g);
     end generate;
 
 end architecture;

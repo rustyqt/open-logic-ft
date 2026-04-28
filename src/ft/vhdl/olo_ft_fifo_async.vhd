@@ -54,7 +54,7 @@ entity olo_ft_fifo_async is
         In_Data         : in    std_logic_vector(Width_g - 1 downto 0);
         In_Valid        : in    std_logic                               := '1';
         In_Ready        : out   std_logic;
-        In_EccBitFlip   : in    std_logic_vector(1 downto 0)            := "00";
+        In_EccBitFlip   : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
         -- Input Status
         In_Full         : out   std_logic;
         In_Empty        : out   std_logic;
@@ -68,8 +68,8 @@ entity olo_ft_fifo_async is
         Out_Data        : out   std_logic_vector(Width_g - 1 downto 0);
         Out_Valid       : out   std_logic;
         Out_Ready       : in    std_logic                               := '1';
-        Out_SecErr      : out   std_logic;
-        Out_DedErr      : out   std_logic;
+        Out_EccSec      : out   std_logic;
+        Out_EccDed      : out   std_logic;
         -- Output Status
         Out_Full        : out   std_logic;
         Out_Empty       : out   std_logic;
@@ -102,10 +102,10 @@ architecture rtl of olo_ft_fifo_async is
     -- Decoded signals (combinational)
     signal Dec_SynPar : std_logic_vector(ParityBits_c downto 0);
     signal Dec_Data   : std_logic_vector(Width_g - 1 downto 0);
-    signal Dec_SecErr : std_logic;
-    signal Dec_DedErr : std_logic;
+    signal Dec_EccSec : std_logic;
+    signal Dec_EccDed : std_logic;
 
-    -- Pipeline bus (bundled: SecErr & DedErr & Data)
+    -- Pipeline bus (bundled: EccSec & EccDed & Data)
     signal Pl_InData  : std_logic_vector(PlWidth_c - 1 downto 0);
     signal Pl_OutData : std_logic_vector(PlWidth_c - 1 downto 0);
 
@@ -114,10 +114,8 @@ begin
     -- Encode write data
     In_Encoded <= eccEncode(In_Data);
 
-    -- Error injection (flip codeword bits for testing / BIST)
-    In_Injected(CodewordWidth_c - 1 downto 2) <= In_Encoded(CodewordWidth_c - 1 downto 2);
-    In_Injected(1)                             <= In_Encoded(1) xor In_EccBitFlip(1);
-    In_Injected(0)                             <= In_Encoded(0) xor In_EccBitFlip(0);
+    -- Error injection (XOR full bit-flip pattern into the encoded codeword for testing / BIST)
+    In_Injected <= In_Encoded xor In_EccBitFlip;
 
     -- Base FIFO with wider codeword width, using TMR-hardened CDC primitives
     i_fifo : entity work.olo_base_fifo_async
@@ -166,11 +164,11 @@ begin
     -- ECC decode (combinational)
     Dec_SynPar <= eccSyndromeAndParity(Fifo_OutData, Width_g);
     Dec_Data   <= eccCorrectData(Fifo_OutData, Dec_SynPar, Width_g);
-    Dec_SecErr <= eccSecError(Dec_SynPar);
-    Dec_DedErr <= eccDedError(Dec_SynPar);
+    Dec_EccSec <= eccSecError(Dec_SynPar);
+    Dec_EccDed <= eccDedError(Dec_SynPar);
 
     -- Bundle decoded data and error flags for pipeline
-    Pl_InData <= Dec_SecErr & Dec_DedErr & Dec_Data;
+    Pl_InData <= Dec_EccSec & Dec_EccDed & Dec_Data;
 
     -- Pipeline stage with Valid/Ready handshaking (0 stages = passthrough)
     i_pl : entity work.olo_base_pl_stage
@@ -191,7 +189,7 @@ begin
 
     -- Unbundle output
     Out_Data   <= Pl_OutData(Width_g - 1 downto 0);
-    Out_DedErr <= Pl_OutData(Width_g);
-    Out_SecErr <= Pl_OutData(Width_g + 1);
+    Out_EccDed <= Pl_OutData(Width_g);
+    Out_EccSec <= Pl_OutData(Width_g + 1);
 
 end architecture;

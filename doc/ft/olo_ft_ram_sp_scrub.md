@@ -57,10 +57,10 @@ is dramatically simpler, more portable, and just as fast in practice.
 | Addr         | in     | _ceil(log2(Depth_g))_ | -       | Address                                                      |
 | WrEna        | in     | 1                     | '0'     | Write enable                                                 |
 | WrData       | in     | _Width_g_             | 0       | Write data                                                   |
-| WrEccBitFlip | in     | 2                     | "00"    | ECC error injection (test/BIST). See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
+| WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 | RdData       | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)    |
-| RdSecErr     | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
-| RdDedErr     | out    | 1                     | N/A     | Double error detected flag (per read)                        |
+| RdEccSec     | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
+| RdEccDed     | out    | 1                     | N/A     | Double error detected flag (per read)                        |
 
 ### Scrubber Arbitration
 
@@ -75,8 +75,8 @@ is dramatically simpler, more portable, and just as fast in practice.
 | :------------- | :----- | :-------------------- | ------- | :----------------------------------------------------------- |
 | Scrub_Active   | out    | 1                     | N/A     | '1' while scrubber FSM is processing an address              |
 | Scrub_Addr     | out    | _ceil(log2(Depth_g))_ | N/A     | Current/most recent scrubbed address                         |
-| Scrub_SecErr   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a single-bit error            |
-| Scrub_DedErr   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a double-bit error            |
+| Scrub_EccSec   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a single-bit error            |
+| Scrub_EccDed   | out    | 1                     | N/A     | Pulses '1' when scrubber finds a double-bit error            |
 | Scrub_PassDone | out    | 1                     | N/A     | Pulses '1' when scrubber completes a full memory pass        |
 
 ## Detailed Description
@@ -103,7 +103,7 @@ To issue accesses, the user logic must follow this sequence:
                      └────┬────────────┘
                           │
                           ▼
-                   RdData / RdSecErr / RdDedErr
+                   RdData / RdEccSec / RdEccDed
                    → routed to user always
 ```
 
@@ -141,7 +141,7 @@ prevents stale-write hazards.
 In **both** modes, the scrubber **never writes back when a DED is detected**. The decoded data
 on a double-bit error is unreliable (SECDED can detect but not correct double-bit errors), and
 writing it back would silently corrupt memory by replacing a detectable error with a "valid"
-codeword over wrong data. Instead, _Scrub_DedErr_ pulses and the corrupted memory is left
+codeword over wrong data. Instead, _Scrub_EccDed_ pulses and the corrupted memory is left
 intact so the user can detect the unfixable error on their next read.
 
 ### Constraints
@@ -150,5 +150,5 @@ intact so the user can detect the unfixable error on their next read.
   _Scrub_Stopped_ = '0' are ignored (the scrubber owns the bus).
 - _Scrub_PassDone_ is pulsed when the address counter wraps from _Depth_g_-1 back to 0
 - The scrubber does not protect against double-bit errors (SECDED can detect but not correct).
-  When the scrubber encounters a DED, it pulses _Scrub_DedErr_ and **leaves the memory contents
+  When the scrubber encounters a DED, it pulses _Scrub_EccDed_ and **leaves the memory contents
   unchanged** (no writeback) so the error remains detectable on subsequent reads.

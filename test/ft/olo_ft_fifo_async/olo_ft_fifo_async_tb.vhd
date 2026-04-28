@@ -15,6 +15,7 @@ library vunit_lib;
 
 library olo;
     use olo.olo_base_pkg_math.all;
+    use olo.olo_ft_pkg_ecc.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -34,9 +35,28 @@ architecture sim of olo_ft_fifo_async_tb is
     -----------------------------------------------------------------------------------------------
     -- Constants
     -----------------------------------------------------------------------------------------------
-    constant InClkPeriod_c  : time    := 10 ns;
-    constant OutClkPeriod_c : time    := 33.3 ns;
-    constant Depth_c        : natural := 32;
+    constant InClkPeriod_c   : time     := 10 ns;
+    constant OutClkPeriod_c  : time     := 33.3 ns;
+    constant Depth_c         : natural  := 32;
+    constant CodewordWidth_c : positive := eccCodewordWidth(Width_g);
+
+    -----------------------------------------------------------------------------------------------
+    -- Bit-flip pattern helpers
+    -----------------------------------------------------------------------------------------------
+    function singleBit (idx : natural) return std_logic_vector is
+        variable Result_v : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    begin
+        Result_v(idx) := '1';
+        return Result_v;
+    end function;
+
+    function doubleBit (idxA : natural; idxB : natural) return std_logic_vector is
+        variable Result_v : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    begin
+        Result_v(idxA) := '1';
+        Result_v(idxB) := '1';
+        return Result_v;
+    end function;
 
     -----------------------------------------------------------------------------------------------
     -- Interface Signals
@@ -47,7 +67,7 @@ architecture sim of olo_ft_fifo_async_tb is
     signal In_Data       : std_logic_vector(Width_g - 1 downto 0)                 := (others => '0');
     signal In_Valid      : std_logic                                              := '0';
     signal In_Ready      : std_logic;
-    signal In_EccBitFlip : std_logic_vector(1 downto 0)                           := "00";
+    signal In_EccBitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0)         := (others => '0');
     signal In_Level      : std_logic_vector(log2ceil(Depth_c + 1) - 1 downto 0);
     signal Out_Clk       : std_logic                                              := '0';
     signal Out_Rst       : std_logic                                              := '0';
@@ -55,8 +75,8 @@ architecture sim of olo_ft_fifo_async_tb is
     signal Out_Data      : std_logic_vector(Width_g - 1 downto 0);
     signal Out_Valid     : std_logic;
     signal Out_Ready     : std_logic                                              := '0';
-    signal Out_SecErr    : std_logic;
-    signal Out_DedErr    : std_logic;
+    signal Out_EccSec    : std_logic;
+    signal Out_EccDed    : std_logic;
     signal Out_Level     : std_logic_vector(log2ceil(Depth_c + 1) - 1 downto 0);
 
 begin
@@ -86,8 +106,8 @@ begin
             Out_Data      => Out_Data,
             Out_Valid     => Out_Valid,
             Out_Ready     => Out_Ready,
-            Out_SecErr    => Out_SecErr,
-            Out_DedErr    => Out_DedErr,
+            Out_EccSec    => Out_EccSec,
+            Out_EccDed    => Out_EccDed,
             Out_Level     => Out_Level
         );
 
@@ -133,42 +153,82 @@ begin
                 for i in 1 to 3 loop
                     wait until rising_edge(Out_Clk) and Out_Valid = '1';
                     check_equal(Out_Data, toUslv(i * 10, Width_g), "Basic data " & integer'image(i));
-                    check_equal(Out_SecErr, '0', "Basic SecErr " & integer'image(i));
-                    check_equal(Out_DedErr, '0', "Basic DedErr " & integer'image(i));
+                    check_equal(Out_EccSec, '0', "Basic EccSec " & integer'image(i));
+                    check_equal(Out_EccDed, '0', "Basic EccDed " & integer'image(i));
                 end loop;
 
             -- Single bit error injection
-            elsif run("SecErr") then
+            elsif run("EccSec") then
                 wait until rising_edge(In_Clk);
                 In_Data       <= toUslv(16#AB#, Width_g);
                 In_Valid      <= '1';
-                In_EccBitFlip <= "01";
+                In_EccBitFlip <= singleBit(0);
                 wait until rising_edge(In_Clk);
                 In_Valid      <= '0';
-                In_EccBitFlip <= "00";
+                In_EccBitFlip <= (others => '0');
                 wait for 200 ns;
 
                 Out_Ready <= '1';
                 wait until rising_edge(Out_Clk) and Out_Valid = '1';
                 check_equal(Out_Data, toUslv(16#AB#, Width_g), "Sec data corrected");
-                check_equal(Out_SecErr, '1', "Sec SecErr");
-                check_equal(Out_DedErr, '0', "Sec DedErr");
+                check_equal(Out_EccSec, '1', "Sec EccSec");
+                check_equal(Out_EccDed, '0', "Sec EccDed");
 
             -- Double bit error detection
-            elsif run("DedErr") then
+            elsif run("EccDed") then
                 wait until rising_edge(In_Clk);
                 In_Data       <= toUslv(16#EF#, Width_g);
                 In_Valid      <= '1';
-                In_EccBitFlip <= "11";
+                In_EccBitFlip <= doubleBit(0, 1);
                 wait until rising_edge(In_Clk);
                 In_Valid      <= '0';
-                In_EccBitFlip <= "00";
+                In_EccBitFlip <= (others => '0');
                 wait for 200 ns;
 
                 Out_Ready <= '1';
                 wait until rising_edge(Out_Clk) and Out_Valid = '1';
-                check_equal(Out_SecErr, '0', "Ded SecErr");
-                check_equal(Out_DedErr, '1', "Ded DedErr");
+                check_equal(Out_EccSec, '0', "Ded EccSec");
+                check_equal(Out_EccDed, '1', "Ded EccDed");
+
+            -- SEC across every codeword bit position (full bit-by-bit sweep)
+            elsif run("SecAllBits") then
+                Out_Ready <= '1';
+                for bitIdx in 0 to CodewordWidth_c - 1 loop
+                    wait until rising_edge(In_Clk);
+                    In_Data       <= toUslv(16#A5#, Width_g);
+                    In_Valid      <= '1';
+                    In_EccBitFlip <= singleBit(bitIdx);
+                    wait until rising_edge(In_Clk);
+                    In_Valid      <= '0';
+                    In_EccBitFlip <= (others => '0');
+                    wait until rising_edge(Out_Clk) and Out_Valid = '1';
+                    check_equal(Out_Data, toUslv(16#A5#, Width_g),
+                                "SecAllBits data flip " & integer'image(bitIdx));
+                    check_equal(Out_EccSec, '1', "SecAllBits EccSec flip " & integer'image(bitIdx));
+                    check_equal(Out_EccDed, '0', "SecAllBits EccDed flip " & integer'image(bitIdx));
+                end loop;
+
+            -- DED across a representative sample of bit pairs
+            elsif run("DedSampledPairs") then
+                Out_Ready <= '1';
+                for pair in 0 to 4 loop
+                    wait until rising_edge(In_Clk);
+                    In_Data  <= toUslv(16#5A#, Width_g);
+                    In_Valid <= '1';
+                    case pair is
+                        when 0 => In_EccBitFlip <= doubleBit(0, 1);
+                        when 1 => In_EccBitFlip <= doubleBit(0, CodewordWidth_c - 1);
+                        when 2 => In_EccBitFlip <= doubleBit(1, 2);
+                        when 3 => In_EccBitFlip <= doubleBit(2, 5);
+                        when others => In_EccBitFlip <= doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1);
+                    end case;
+                    wait until rising_edge(In_Clk);
+                    In_Valid      <= '0';
+                    In_EccBitFlip <= (others => '0');
+                    wait until rising_edge(Out_Clk) and Out_Valid = '1';
+                    check_equal(Out_EccSec, '0', "DedPair EccSec pair " & integer'image(pair));
+                    check_equal(Out_EccDed, '1', "DedPair EccDed pair " & integer'image(pair));
+                end loop;
 
             end if;
 

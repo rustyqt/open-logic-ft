@@ -58,18 +58,18 @@ entity olo_ft_ram_sp_scrub is
         Addr          : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         WrEna         : in    std_logic                               := '0';
         WrData        : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
-        WrEccBitFlip  : in    std_logic_vector(1 downto 0)            := "00";
+        WrEccBitFlip  : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
         RdData        : out   std_logic_vector(Width_g - 1 downto 0);
-        RdSecErr      : out   std_logic;
-        RdDedErr      : out   std_logic;
+        RdEccSec      : out   std_logic;
+        RdEccDed      : out   std_logic;
         -- Scrubber arbitration
         Scrub_Stop    : in    std_logic                               := '0';
         Scrub_Stopped : out   std_logic;
         -- Scrubber status
         Scrub_Active  : out   std_logic;
         Scrub_Addr    : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        Scrub_SecErr  : out   std_logic;
-        Scrub_DedErr  : out   std_logic;
+        Scrub_EccSec  : out   std_logic;
+        Scrub_EccDed  : out   std_logic;
         Scrub_PassDone : out  std_logic
     );
 end entity;
@@ -106,7 +106,7 @@ architecture rtl of olo_ft_ram_sp_scrub is
     signal Ram_Addr   : std_logic_vector(AddrWidth_c - 1 downto 0);
     signal Ram_WrEna  : std_logic;
     signal Ram_WrData : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_WrFlip : std_logic_vector(1 downto 0);
+    signal Ram_WrFlip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
     signal Ram_RdData : std_logic_vector(Width_g - 1 downto 0);
     signal Ram_RdSec  : std_logic;
     signal Ram_RdDed  : std_logic;
@@ -131,8 +131,8 @@ begin
     begin
         if rising_edge(Clk) then
             -- Default pulses
-            Scrub_SecErr   <= '0';
-            Scrub_DedErr   <= '0';
+            Scrub_EccSec   <= '0';
+            Scrub_EccDed   <= '0';
             Scrub_PassDone <= '0';
 
             case State is
@@ -166,8 +166,8 @@ begin
                     CapturedSec  <= Ram_RdSec;
                     CapturedDed  <= Ram_RdDed;
                     -- Pulse scrubber error flags
-                    Scrub_SecErr <= Ram_RdSec;
-                    Scrub_DedErr <= Ram_RdDed;
+                    Scrub_EccSec <= Ram_RdSec;
+                    Scrub_EccDed <= Ram_RdDed;
                     State        <= Write_s;
 
                 when Write_s =>
@@ -237,7 +237,7 @@ begin
     Ram_WrData <= CapturedData when ScrubMaster = '1' else WrData;
 
     -- Error injection mux: scrubber never injects errors
-    Ram_WrFlip <= "00" when ScrubMaster = '1' else WrEccBitFlip;
+    Ram_WrFlip <= (Ram_WrFlip'range => '0') when ScrubMaster = '1' else WrEccBitFlip;
 
     -----------------------------------------------------------------------------------------------
     -- Internal FT SP RAM
@@ -258,8 +258,8 @@ begin
             WrData       => Ram_WrData,
             WrEccBitFlip => Ram_WrFlip,
             RdData       => Ram_RdData,
-            RdSecErr     => Ram_RdSec,
-            RdDedErr     => Ram_RdDed
+            RdEccSec     => Ram_RdSec,
+            RdEccDed     => Ram_RdDed
         );
 
     -----------------------------------------------------------------------------------------------
@@ -268,7 +268,7 @@ begin
     -- after issuing a read, exactly like a normal olo_ft_ram_sp.
     -----------------------------------------------------------------------------------------------
     RdData   <= Ram_RdData;
-    RdSecErr <= Ram_RdSec;
-    RdDedErr <= Ram_RdDed;
+    RdEccSec <= Ram_RdSec;
+    RdEccDed <= Ram_RdDed;
 
 end architecture;

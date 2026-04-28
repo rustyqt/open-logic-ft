@@ -41,10 +41,10 @@ space or high-energy physics environments.
 | A_Addr         | in     | _ceil(log2(Depth_g))_ | -       | Port A address                                               |
 | A_WrEna        | in     | 1                     | '0'     | Port A write enable                                          |
 | A_WrData       | in     | _Width_g_             | 0       | Port A write data                                            |
-| A_WrEccBitFlip | in     | 2                     | "00"    | ECC error injection for testing/BIST. Each bit flips the corresponding bit in the stored codeword.<br>"01" = single-bit error, "11" = double-bit error.<br>See [Error Injection](#error-injection). |
+| A_WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable.<br>See [Error Injection](#error-injection). |
 | A_RdData       | out    | _Width_g_             | N/A     | Port A read data (corrected if a single-bit error was detected) |
-| A_RdSecErr     | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected in the read data. |
-| A_RdDedErr     | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
+| A_RdEccSec     | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected in the read data. |
+| A_RdEccDed     | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
 
 ### Port B
 
@@ -54,10 +54,10 @@ space or high-energy physics environments.
 | B_Addr         | in     | _ceil(log2(Depth_g))_ | -       | Port B address                                               |
 | B_WrEna        | in     | 1                     | '0'     | Port B write enable                                          |
 | B_WrData       | in     | _Width_g_             | 0       | Port B write data                                            |
-| B_WrEccBitFlip | in     | 2                     | "00"    | Same behavior as _A_WrEccBitFlip_                            |
+| B_WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | Same behavior as _A_WrEccBitFlip_                            |
 | B_RdData       | out    | _Width_g_             | N/A     | Port B read data (corrected if a single-bit error was detected) |
-| B_RdSecErr     | out    | 1                     | N/A     | Same behavior as _A_RdSecErr_                                |
-| B_RdDedErr     | out    | 1                     | N/A     | Same behavior as _A_RdDedErr_                                |
+| B_RdEccSec     | out    | 1                     | N/A     | Same behavior as _A_RdEccSec_                                |
+| B_RdEccDed     | out    | 1                     | N/A     | Same behavior as _A_RdEccDed_                                |
 
 ## Detailed Description
 
@@ -65,7 +65,8 @@ space or high-energy physics environments.
 
 ```
 Write path:  WrData -> eccEncode -> XOR bit-flip injection -> wider internal RAM
-Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + SecErr/DedErr -> [optional ECC pipeline]
+Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + EccSec/EccDed -> [optional ECC pipeline]
+
 ```
 
 The ECC encoding is combinational on the write path. The internal RAM (an instance of _olo_base_ram_tdp_ with wider
@@ -90,12 +91,20 @@ The SECDED Hamming code adds parity bits to each stored word:
 
 ### Error Injection
 
-The _A_WrEccBitFlip_ and _B_WrEccBitFlip_ ports allow deliberate injection of bit errors into stored codewords. This
-is useful for testing the ECC mechanism in simulation and for built-in self-test (BIST) in hardware.
+The _A_WrEccBitFlip_ and _B_WrEccBitFlip_ ports allow arbitrary bit-flip patterns to be XORed into the stored codeword
+on each write. This is useful for testing the ECC mechanism in simulation and for built-in self-test (BIST) in
+hardware. Each port is the full codeword width (_eccCodewordWidth(Width_g)_), so any bit position can be exercised -
+which is needed to fully verify the SECDED codec.
 
-- Setting bit 0 to '1' flips bit 0 of the stored codeword (overall parity bit)
-- Setting bit 1 to '1' flips bit 1 of the stored codeword (first Hamming parity bit)
-- Setting both bits to '1' injects a double-bit error
+| Popcount of WrEccBitFlip | Meaning              | Behavior                                                            |
+| :----------------------- | :------------------- | :------------------------------------------------------------------ |
+| 0                        | No injection         | Codeword stored unchanged. _RdEccSec_ = '0', _RdEccDed_ = '0'.      |
+| 1                        | Single-bit error     | SEC-correctable. _RdEccSec_ = '1', _RdEccDed_ = '0', data corrected. |
+| 2                        | Double-bit error     | DED-detectable. _RdEccSec_ = '0', _RdEccDed_ = '1', data unreliable. |
+| ≥ 3                      | Outside SECDED range | Detection behavior is undefined - the SECDED Hamming code only guarantees correct classification for at most 2 bit errors. |
+
+Codeword bit 0 is the overall parity bit, bits at power-of-2 positions (1, 2, 4, 8, ...) are Hamming parity bits, and
+all remaining positions hold data bits. See [olo_ft_pkg_ecc](./olo_ft_pkg_ecc.md) for the full codeword layout.
 
 ### Constraints
 

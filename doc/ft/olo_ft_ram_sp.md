@@ -38,11 +38,58 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Addr         | in     | _ceil(log2(Depth_g))_ | -       | Address                                                      |
 | WrEna        | in     | 1                     | '1'     | Write enable                                                 |
 | WrData       | in     | _Width_g_             | -       | Write data                                                   |
-| WrEccBitFlip | in     | 2                     | "00"    | ECC error injection. "01" = single-bit error, "11" = double-bit error. See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
+| WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable.<br>See [Error Injection](#error-injection). |
 | RdData       | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)     |
-| RdSecErr     | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
-| RdDedErr     | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
+| RdEccSec     | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
+| RdEccDed     | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
 
 ## Detailed Description
 
-See [olo_ft_ram_tdp](./olo_ft_ram_tdp.md) for details on ECC overhead, architecture, error injection, and constraints.
+### Architecture
+
+```
+Write path:  WrData -> eccEncode -> XOR bit-flip injection -> wider internal RAM
+Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + EccSec/EccDed -> [optional ECC pipeline]
+```
+
+The ECC encoding is combinational on the write path. The internal RAM (an instance of _olo_base_ram_sp_ with wider
+word) provides the configurable read pipeline (_RdLatency_g_). The ECC decoding is combinational after the read
+pipeline, so the error flags are time-aligned with the read data.
+
+When _EccPipeline_g_ > 0, additional register stages are inserted after the ECC decode logic. This breaks the
+combinational path between the RAM output and the corrected data output, which can help close timing at high clock
+frequencies. The total read latency becomes _RdLatency_g_ + _EccPipeline_g_ clock cycles.
+
+### ECC Overhead
+
+The SECDED Hamming code adds parity bits to each stored word:
+
+| Data Width | Parity Bits | Total Stored Bits |
+| :--------- | :---------- | :---------------- |
+| 8          | 5           | 13                |
+| 16         | 6           | 22                |
+| 32         | 7           | 39                |
+| 64         | 8           | 72                |
+| 128        | 9           | 137               |
+
+### Error Injection
+
+The _WrEccBitFlip_ port allows arbitrary bit-flip patterns to be XORed into the stored codeword on each write. This is
+useful for testing the ECC mechanism in simulation and for built-in self-test (BIST) in hardware. The port is the
+full codeword width (_eccCodewordWidth(Width_g)_), so any bit position can be exercised - which is needed to
+fully verify the SECDED codec.
+
+| Popcount of WrEccBitFlip | Meaning              | Behavior                                                        |
+| :----------------------- | :------------------- | :-------------------------------------------------------------- |
+| 0                        | No injection         | Codeword stored unchanged. _RdEccSec_ = '0', _RdEccDed_ = '0'.  |
+| 1                        | Single-bit error     | SEC-correctable. _RdEccSec_ = '1', _RdEccDed_ = '0', data corrected. |
+| 2                        | Double-bit error     | DED-detectable. _RdEccSec_ = '0', _RdEccDed_ = '1', data unreliable. |
+| ≥ 3                      | Outside SECDED range | Detection behavior is undefined - the SECDED Hamming code only guarantees correct classification for at most 2 bit errors. |
+
+Codeword bit 0 is the overall parity bit, bits at power-of-2 positions (1, 2, 4, 8, ...) are Hamming parity bits, and
+all remaining positions hold data bits. See [olo_ft_pkg_ecc](./olo_ft_pkg_ecc.md) for the full codeword layout.
+
+### Constraints
+
+- Byte enables are not supported (ECC covers the full word; partial writes would invalidate parity)
+- RAM initialization is not supported (the internal RAM stores ECC codewords, not raw data)

@@ -62,21 +62,21 @@ entity olo_ft_ram_sdp_scrub is
         Wr_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Wr_Ena         : in    std_logic                               := '0';
         Wr_Data        : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
-        Wr_EccBitFlip  : in    std_logic_vector(1 downto 0)            := "00";
+        Wr_EccBitFlip  : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
         -- User read interface (matches olo_ft_ram_sdp)
         Rd_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Rd_Ena         : in    std_logic                               := '0';
         Rd_Data        : out   std_logic_vector(Width_g - 1 downto 0);
-        Rd_SecErr      : out   std_logic;
-        Rd_DedErr      : out   std_logic;
+        Rd_EccSec      : out   std_logic;
+        Rd_EccDed      : out   std_logic;
         -- Scrubber arbitration
         Scrub_Stop     : in    std_logic                               := '0';
         Scrub_Stopped  : out   std_logic;
         -- Scrubber status
         Scrub_Active   : out   std_logic;
         Scrub_Addr     : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        Scrub_SecErr   : out   std_logic;
-        Scrub_DedErr   : out   std_logic;
+        Scrub_EccSec   : out   std_logic;
+        Scrub_EccDed   : out   std_logic;
         Scrub_PassDone : out   std_logic
     );
 end entity;
@@ -113,7 +113,7 @@ architecture rtl of olo_ft_ram_sdp_scrub is
     signal Ram_Wr_Addr : std_logic_vector(AddrWidth_c - 1 downto 0);
     signal Ram_Wr_Ena  : std_logic;
     signal Ram_Wr_Data : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_Wr_Flip : std_logic_vector(1 downto 0);
+    signal Ram_Wr_Flip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
 
     -- Multiplexed RAM signals (read port)
     signal Ram_Rd_Addr : std_logic_vector(AddrWidth_c - 1 downto 0);
@@ -142,8 +142,8 @@ begin
     begin
         if rising_edge(Clk) then
             -- Default pulses
-            Scrub_SecErr   <= '0';
-            Scrub_DedErr   <= '0';
+            Scrub_EccSec   <= '0';
+            Scrub_EccDed   <= '0';
             Scrub_PassDone <= '0';
 
             case State is
@@ -177,8 +177,8 @@ begin
                     CapturedSec  <= Ram_Rd_Sec;
                     CapturedDed  <= Ram_Rd_Ded;
                     -- Pulse scrubber error flags
-                    Scrub_SecErr <= Ram_Rd_Sec;
-                    Scrub_DedErr <= Ram_Rd_Ded;
+                    Scrub_EccSec <= Ram_Rd_Sec;
+                    Scrub_EccDed <= Ram_Rd_Ded;
                     State        <= Write_s;
 
                 when Write_s =>
@@ -242,7 +242,7 @@ begin
     Ram_Wr_Addr <= std_logic_vector(ScrubAddr_v) when ScrubMaster = '1' else Wr_Addr;
     Ram_Wr_Ena  <= ScrubWriteReq                 when ScrubMaster = '1' else Wr_Ena;
     Ram_Wr_Data <= CapturedData                  when ScrubMaster = '1' else Wr_Data;
-    Ram_Wr_Flip <= "00"                          when ScrubMaster = '1' else Wr_EccBitFlip;
+    Ram_Wr_Flip <= (Ram_Wr_Flip'range => '0')    when ScrubMaster = '1' else Wr_EccBitFlip;
 
     -- Read port mux
     Ram_Rd_Addr <= std_logic_vector(ScrubAddr_v) when ScrubMaster = '1' else Rd_Addr;
@@ -271,8 +271,8 @@ begin
             Rd_Addr       => Ram_Rd_Addr,
             Rd_Ena        => Ram_Rd_Ena,
             Rd_Data       => Ram_Rd_Data,
-            Rd_SecErr     => Ram_Rd_Sec,
-            Rd_DedErr     => Ram_Rd_Ded
+            Rd_EccSec     => Ram_Rd_Sec,
+            Rd_EccDed     => Ram_Rd_Ded
         );
 
     -----------------------------------------------------------------------------------------------
@@ -281,7 +281,7 @@ begin
     -- after issuing a read, exactly like a normal olo_ft_ram_sdp.
     -----------------------------------------------------------------------------------------------
     Rd_Data   <= Ram_Rd_Data;
-    Rd_SecErr <= Ram_Rd_Sec;
-    Rd_DedErr <= Ram_Rd_Ded;
+    Rd_EccSec <= Ram_Rd_Sec;
+    Rd_EccDed <= Ram_Rd_Ded;
 
 end architecture;
