@@ -32,7 +32,7 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | :------------ | :------- | :--------- | :----------------------------------------------------------- |
 | Depth_g       | positive | -          | Number of addresses                                          |
 | Width_g       | positive | -          | User data width                                              |
-| RdLatency_g   | positive | 1          | Read latency (passed to underlying _olo_ft_ram_sdp_)         |
+| RamRdLatency_g   | positive | 1          | Read latency (passed to underlying _olo_ft_ram_sdp_)         |
 | RamStyle_g    | string   | "auto"     | Passed through                                               |
 | RamBehavior_g | string   | "RBW"      | Passed through                                               |
 | EccPipeline_g | natural  | 0          | Passed through                                               |
@@ -50,7 +50,7 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | Wr_Addr       | in     | _ceil(log2(Depth_g))_ | -       | Write address                                                |
 | Wr_Ena        | in     | 1                     | '0'    | Write enable                                                 |
 | Wr_Data       | in     | _Width_g_             | 0       | Write data                                                   |
-| Wr_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
+| ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 
 ### User Read Port
 
@@ -59,6 +59,7 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 | Rd_Addr   | in     | _ceil(log2(Depth_g))_ | -       | Read address                                                 |
 | Rd_Ena    | in     | 1                     | '0'    | Read enable                                                  |
 | Rd_Data   | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)    |
+| Rd_Valid  | out    | 1                     | N/A     | Read-data valid flag for user-initiated reads. Cycles consumed by the scrubber are masked out. |
 | Rd_EccSec | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
 | Rd_EccDed | out    | 1                     | N/A     | Double error detected flag (per read)                        |
 
@@ -86,30 +87,30 @@ read-wait-decide-write sequence that requires both ports on the same clock.
 To issue accesses, the user logic must follow this sequence:
 
 1. Assert _Scrub_Stop_ <= '1'
-2. Wait until _Scrub_Stopped_ = '1'. Worst case ~_RdLatency_g_ + _EccPipeline_g_ + 4 clock cycles
-3. Issue any number of accesses with normal SDP RAM semantics. Write on _Wr_Addr_/_Wr_Ena_/_Wr_Data_, read on _Rd_Addr_/_Rd_Ena_. Read data appears _RdLatency_g_ + _EccPipeline_g_ cycles after the address is sampled
+2. Wait until _Scrub_Stopped_ = '1'. Worst case ~_RamRdLatency_g_ + _EccPipeline_g_ + 4 clock cycles
+3. Issue any number of accesses with normal SDP RAM semantics. Write on _Wr_Addr_/_Wr_Ena_/_Wr_Data_, read on _Rd_Addr_/_Rd_Ena_. Read data appears _RamRdLatency_g_ + _EccPipeline_g_ cycles after the address is sampled
 4. Deassert _Scrub_Stop_ <= '0'
 5. The scrubber resumes on the next clock cycle
 
 ### Architecture
 
 ```
-                     ┌──────────────────┐
-  User Wr_Addr/   ┌──┤                  │
-  Wr_Ena/Wr_Data  │  │                  │
-            WR MUX──►│  olo_ft_ram_sdp  │
-   Scrubber FSM ──┘  │                  │
-   (Write)           │                  │
-                     │                  │
-   User Rd_Addr/ ┌───┤                  │
-   Rd_Ena        │   │                  │
-            RD MUX──►│                  │
-   Scrubber FSM ─┘   │                  │
-   (Read)            └────┬─────────────┘
-                          │
-                          ▼
+                     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  User Wr_Addr/   â”Œâ”€â”€â”¤                  â”‚
+  Wr_Ena/Wr_Data  â”‚  â”‚                  â”‚
+            WR MUXâ”€â”€â–ºâ”‚  olo_ft_ram_sdp  â”‚
+   Scrubber FSM â”€â”€â”˜  â”‚                  â”‚
+   (Write)           â”‚                  â”‚
+                     â”‚                  â”‚
+   User Rd_Addr/ â”Œâ”€â”€â”€â”¤                  â”‚
+   Rd_Ena        â”‚   â”‚                  â”‚
+            RD MUXâ”€â”€â–ºâ”‚                  â”‚
+   Scrubber FSM â”€â”˜   â”‚                  â”‚
+   (Read)            â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                          â”‚
+                          â–¼
                    Rd_Data / Rd_EccSec / Rd_EccDed
-                   → routed to user always
+                   â†’ routed to user always
 ```
 
 The wrapper instantiates an _olo_ft_ram_sdp_ with `IsAsync_g => false`. Two multiplexers select
@@ -125,10 +126,10 @@ The scrubber FSM has these states (identical to [olo_ft_ram_sp_scrub](./olo_ft_r
 | :------- | :-------------------------------------------------------------------- |
 | Idle     | Counts _ScrubPeriod_g_ cycles. If _Scrub_Stop_=1, transition to Yielded |
 | Read     | Issues a read of the current scrub address on the read port           |
-| Wait     | Waits _RdLatency_g_+_EccPipeline_g_ cycles for the read result        |
+| Wait     | Waits _RamRdLatency_g_+_EccPipeline_g_ cycles for the read result        |
 | Decide   | Captures the decoded read data and error flags                        |
 | Write    | Writes the captured (corrected) value back on the write port, conditional on _ScrubMode_g_ |
-| Incr     | Advances the scrub address (wraps → pulse _Scrub_PassDone_)           |
+| Incr     | Advances the scrub address (wraps â†’ pulse _Scrub_PassDone_)           |
 | Yielded  | Holds while _Scrub_Stop_=1; user owns both ports                      |
 
 **Atomicity**: once the FSM enters Read state, the entire R-M-W sequence completes even if

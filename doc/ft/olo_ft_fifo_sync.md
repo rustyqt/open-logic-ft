@@ -42,7 +42,7 @@ flags indicate whether a single-bit error was corrected or a double-bit error wa
 | In_Valid      | in     | 1                        | '1'     | Input valid (AXI-S handshaking)                              |
 | In_Ready      | out    | 1                        | N/A     | Input ready (AXI-S handshaking)                              |
 | In_Level      | out    | _ceil(log2(Depth_g+1))_  | N/A     | Input-side fill level                                        |
-| In_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
+| In_ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 | Out_Data      | out    | _Width_g_                | N/A     | Output data (corrected if a single-bit error was detected)   |
 | Out_Valid     | out    | 1                        | N/A     | Output valid (AXI-S handshaking)                             |
 | Out_Ready     | in     | 1                        | '1'     | Output ready (AXI-S handshaking)                             |

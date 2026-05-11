@@ -43,7 +43,7 @@ entity olo_ft_ram_sp_scrub is
     generic (
         Depth_g       : positive;
         Width_g       : positive;
-        RdLatency_g   : positive := 1;
+        RamRdLatency_g   : positive := 1;
         RamStyle_g    : string   := "auto";
         RamBehavior_g : string   := "RBW";
         EccPipeline_g : natural  := 0;
@@ -57,9 +57,11 @@ entity olo_ft_ram_sp_scrub is
         -- User interface (matches olo_ft_ram_sp)
         Addr          : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         WrEna         : in    std_logic                               := '0';
-        WrData        : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
-        WrEccBitFlip  : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        WrData         : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
+        ErrInj_BitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        ErrInj_Valid   : in    std_logic                               := '0';
         RdData        : out   std_logic_vector(Width_g - 1 downto 0);
+        RdValid       : out   std_logic;
         RdEccSec      : out   std_logic;
         RdEccDed      : out   std_logic;
         -- Scrubber arbitration
@@ -82,7 +84,7 @@ architecture rtl of olo_ft_ram_sp_scrub is
     -----------------------------------------------------------------------------------------------
     -- Constants
     -----------------------------------------------------------------------------------------------
-    constant TotalReadLatency_c : positive := RdLatency_g + EccPipeline_g;
+    constant TotalReadLatency_c : positive := RamRdLatency_g + EccPipeline_g;
     constant AddrWidth_c        : positive := log2ceil(Depth_g);
     constant ModeAlways_c       : boolean  := compareNoCase(ScrubMode_g, "ALWAYS");
 
@@ -103,13 +105,18 @@ architecture rtl of olo_ft_ram_sp_scrub is
     signal CapturedDed  : std_logic;
 
     -- Multiplexed RAM signals
-    signal Ram_Addr   : std_logic_vector(AddrWidth_c - 1 downto 0);
-    signal Ram_WrEna  : std_logic;
-    signal Ram_WrData : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_WrFlip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
-    signal Ram_RdData : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_RdSec  : std_logic;
-    signal Ram_RdDed  : std_logic;
+    signal Ram_Addr       : std_logic_vector(AddrWidth_c - 1 downto 0);
+    signal Ram_WrEna      : std_logic;
+    signal Ram_WrData     : std_logic_vector(Width_g - 1 downto 0);
+    signal Ram_ErrInjFlip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
+    signal Ram_ErrInjVld  : std_logic;
+    signal Ram_RdData     : std_logic_vector(Width_g - 1 downto 0);
+    signal Ram_RdValid    : std_logic;
+    signal Ram_RdSec      : std_logic;
+    signal Ram_RdDed      : std_logic;
+
+    -- User-facing RdValid pipeline (masks out scrubber cycles)
+    signal UserRdValidPipe : std_logic_vector(1 to TotalReadLatency_c) := (others => '0');
 
     -- Helper
     signal ScrubMaster   : std_logic;
@@ -236,39 +243,56 @@ begin
     -- WrData mux
     Ram_WrData <= CapturedData when ScrubMaster = '1' else WrData;
 
-    -- Error injection mux: scrubber never injects errors
-    Ram_WrFlip <= (Ram_WrFlip'range => '0') when ScrubMaster = '1' else WrEccBitFlip;
+    -- Error injection mux: gate user error injection out while the scrubber owns the port.
+    Ram_ErrInjFlip <= (Ram_ErrInjFlip'range => '0') when ScrubMaster = '1' else ErrInj_BitFlip;
+    Ram_ErrInjVld  <= '0' when ScrubMaster = '1' else ErrInj_Valid;
 
     -----------------------------------------------------------------------------------------------
     -- Internal FT SP RAM
     -----------------------------------------------------------------------------------------------
     i_ram : entity work.olo_ft_ram_sp
         generic map (
-            Depth_g       => Depth_g,
-            Width_g       => Width_g,
-            RdLatency_g   => RdLatency_g,
-            RamStyle_g    => RamStyle_g,
-            RamBehavior_g => RamBehavior_g,
-            EccPipeline_g => EccPipeline_g
+            Depth_g        => Depth_g,
+            Width_g        => Width_g,
+            RamRdLatency_g => RamRdLatency_g,
+            RamStyle_g     => RamStyle_g,
+            RamBehavior_g  => RamBehavior_g,
+            EccPipeline_g  => EccPipeline_g
         )
         port map (
-            Clk          => Clk,
-            Addr         => Ram_Addr,
-            WrEna        => Ram_WrEna,
-            WrData       => Ram_WrData,
-            WrEccBitFlip => Ram_WrFlip,
-            RdData       => Ram_RdData,
-            RdEccSec     => Ram_RdSec,
-            RdEccDed     => Ram_RdDed
+            Clk            => Clk,
+            Addr           => Ram_Addr,
+            WrEna          => Ram_WrEna,
+            WrData         => Ram_WrData,
+            ErrInj_BitFlip => Ram_ErrInjFlip,
+            ErrInj_Valid   => Ram_ErrInjVld,
+            RdData         => Ram_RdData,
+            RdValid        => Ram_RdValid,
+            RdEccSec       => Ram_RdSec,
+            RdEccDed       => Ram_RdDed
         );
 
     -----------------------------------------------------------------------------------------------
     -- User read outputs
-    -- Pass through directly. The user is responsible for tracking RdLatency_g+EccPipeline_g
-    -- after issuing a read, exactly like a normal olo_ft_ram_sp.
+    -- Data, SEC and DED flags are passed through directly. The user is responsible for tracking
+    -- RamRdLatency_g+EccPipeline_g after issuing a read, exactly like a normal olo_ft_ram_sp.
+    -- RdValid only pulses for user-initiated reads (i.e. cycles where the user issued WrEna='0'
+    -- while the scrubber was idle); cycles consumed by the scrubber are masked out.
     -----------------------------------------------------------------------------------------------
     RdData   <= Ram_RdData;
     RdEccSec <= Ram_RdSec;
     RdEccDed <= Ram_RdDed;
+
+    p_user_rd_valid : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            UserRdValidPipe(1) <= (not ScrubMaster) and (not WrEna);
+            for i in 2 to TotalReadLatency_c loop
+                UserRdValidPipe(i) <= UserRdValidPipe(i - 1);
+            end loop;
+        end if;
+    end process;
+
+    RdValid <= UserRdValidPipe(TotalReadLatency_c);
 
 end architecture;

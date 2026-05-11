@@ -39,7 +39,7 @@ is dramatically simpler, more portable, and just as fast in practice.
 | :------------ | :------- | :--------- | :----------------------------------------------------------- |
 | Depth_g       | positive | -          | Number of addresses                                          |
 | Width_g       | positive | -          | User data width                                              |
-| RdLatency_g   | positive | 1          | Read latency (passed to underlying _olo_ft_ram_sp_)          |
+| RamRdLatency_g   | positive | 1          | Read latency (passed to underlying _olo_ft_ram_sp_)          |
 | RamStyle_g    | string   | "auto"     | Passed through                                               |
 | RamBehavior_g | string   | "RBW"      | Passed through                                               |
 | EccPipeline_g | natural  | 0          | Passed through                                               |
@@ -57,8 +57,9 @@ is dramatically simpler, more portable, and just as fast in practice.
 | Addr         | in     | _ceil(log2(Depth_g))_ | -       | Address                                                      |
 | WrEna        | in     | 1                     | '0'     | Write enable                                                 |
 | WrData       | in     | _Width_g_             | 0       | Write data                                                   |
-| WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
+| ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection (test/BIST). Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 | RdData       | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)    |
+| RdValid      | out    | 1                     | N/A     | Read-data valid flag for user-initiated reads. Cycles consumed by the scrubber are masked out. |
 | RdEccSec     | out    | 1                     | N/A     | Single error corrected flag (per read)                       |
 | RdEccDed     | out    | 1                     | N/A     | Double error detected flag (per read)                        |
 
@@ -86,25 +87,25 @@ is dramatically simpler, more portable, and just as fast in practice.
 To issue accesses, the user logic must follow this sequence:
 
 1. Assert _Scrub_Stop_ <= '1'
-2. Wait until _Scrub_Stopped_ = '1'. Worst case ~_RdLatency_g_ + _EccPipeline_g_ + 4 clock cycles
-3. Issue any number of accesses with normal SP RAM semantics. Read data appears _RdLatency_g_ + _EccPipeline_g_ cycles after the address is sampled
+2. Wait until _Scrub_Stopped_ = '1'. Worst case ~_RamRdLatency_g_ + _EccPipeline_g_ + 4 clock cycles
+3. Issue any number of accesses with normal SP RAM semantics. Read data appears _RamRdLatency_g_ + _EccPipeline_g_ cycles after the address is sampled
 4. Deassert _Scrub_Stop_ <= '0'
 5. The scrubber resumes on the next clock cycle
 
 ### Architecture
 
 ```
-                     ┌─────────────────┐
-   User Addr/     ┌──┤                 │
-   WrEna/WrData   │  │                 │
-              MUX───►│   olo_ft_ram_sp │
-   Scrubber FSM ──┘  │                 │
-   (Read/Write)      │                 │
-                     └────┬────────────┘
-                          │
-                          ▼
+                     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   User Addr/     â”Œâ”€â”€â”¤                 â”‚
+   WrEna/WrData   â”‚  â”‚                 â”‚
+              MUXâ”€â”€â”€â–ºâ”‚   olo_ft_ram_sp â”‚
+   Scrubber FSM â”€â”€â”˜  â”‚                 â”‚
+   (Read/Write)      â”‚                 â”‚
+                     â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                          â”‚
+                          â–¼
                    RdData / RdEccSec / RdEccDed
-                   → routed to user always
+                   â†’ routed to user always
 ```
 
 The wrapper instantiates an _olo_ft_ram_sp_. A multiplexer selects between user signals and
@@ -120,10 +121,10 @@ The scrubber FSM has these states:
 | :------- | :-------------------------------------------------------------------- |
 | Idle     | Counts _ScrubPeriod_g_ cycles. If _Scrub_Stop_=1, transition to Yielded |
 | Read     | Issues a read of the current scrub address                            |
-| Wait     | Waits _RdLatency_g_+_EccPipeline_g_ cycles for the read result        |
+| Wait     | Waits _RamRdLatency_g_+_EccPipeline_g_ cycles for the read result        |
 | Decide   | Captures the decoded read data and error flags                        |
 | Write    | Writes the captured (corrected) value back, conditional on _ScrubMode_g_ |
-| Incr     | Advances the scrub address (wraps → pulse _Scrub_PassDone_)           |
+| Incr     | Advances the scrub address (wraps â†’ pulse _Scrub_PassDone_)           |
 | Yielded  | Holds while _Scrub_Stop_=1; user owns the port                        |
 
 **Atomicity**: once the FSM enters Read state, the entire R-M-W sequence completes even if

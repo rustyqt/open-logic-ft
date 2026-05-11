@@ -28,7 +28,7 @@ entity olo_ft_ram_sdp_tb is
         Width_g       : positive range 5 to 128 := 32;
         RamBehavior_g : string                  := "RBW";
         IsAsync_g     : boolean                 := false;
-        RdLatency_g   : positive range 1 to 2   := 1;
+        RamRdLatency_g   : positive range 1 to 2   := 1;
         EccPipeline_g : natural range 0 to 1    := 0
     );
 end entity;
@@ -82,25 +82,28 @@ architecture sim of olo_ft_ram_sdp_tb is
     end procedure;
 
     procedure writeWithFlip (
-        address       : natural;
-        data          : natural;
-        flipBits      : std_logic_vector;
-        signal Clk    : in std_logic;
-        signal Addr   : out std_logic_vector;
-        signal WrData : out std_logic_vector;
-        signal WrEna  : out std_logic;
-        signal WrFlip : out std_logic_vector) is
+        address         : natural;
+        data            : natural;
+        flipBits        : std_logic_vector;
+        signal Clk      : in std_logic;
+        signal Addr     : out std_logic_vector;
+        signal WrData   : out std_logic_vector;
+        signal WrEna    : out std_logic;
+        signal InjFlip  : out std_logic_vector;
+        signal InjValid : out std_logic) is
     begin
         wait until rising_edge(Clk);
-        Addr   <= toUslv(address, Addr'length);
-        WrData <= toUslv(data, WrData'length);
-        WrEna  <= '1';
-        WrFlip <= flipBits;
+        Addr     <= toUslv(address, Addr'length);
+        WrData   <= toUslv(data, WrData'length);
+        WrEna    <= '1';
+        InjFlip  <= flipBits;
+        InjValid <= '1';
         wait until rising_edge(Clk);
-        WrEna  <= '0';
-        WrFlip <= (WrFlip'range => '0');
-        Addr   <= toUslv(0, Addr'length);
-        WrData <= toUslv(0, WrData'length);
+        WrEna    <= '0';
+        InjFlip  <= (InjFlip'range => '0');
+        InjValid <= '0';
+        Addr     <= toUslv(0, Addr'length);
+        WrData   <= toUslv(0, WrData'length);
     end procedure;
 
     procedure checkEcc (
@@ -121,7 +124,7 @@ architecture sim of olo_ft_ram_sdp_tb is
         Addr <= toUslv(0, Addr'length);
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g + EccPipeline_g loop
+        for i in 1 to RamRdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -146,7 +149,7 @@ architecture sim of olo_ft_ram_sdp_tb is
         Addr <= toUslv(0, Addr'length);
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g + EccPipeline_g loop
+        for i in 1 to RamRdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -160,8 +163,9 @@ architecture sim of olo_ft_ram_sdp_tb is
     signal Clk           : std_logic                                := '0';
     signal Wr_Addr       : std_logic_vector(7 downto 0)             := (others => '0');
     signal Wr_Ena        : std_logic                                := '0';
-    signal Wr_Data       : std_logic_vector(Width_g - 1 downto 0)   := (others => '0');
-    signal Wr_EccBitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal Wr_Data        : std_logic_vector(Width_g - 1 downto 0)   := (others => '0');
+    signal ErrInj_BitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal ErrInj_Valid   : std_logic                                := '0';
     signal Rd_Clk        : std_logic                                := '0';
     signal Rd_Addr       : std_logic_vector(7 downto 0)             := (others => '0');
     signal Rd_Ena        : std_logic                                := '1';
@@ -180,7 +184,7 @@ begin
             Width_g       => Width_g,
             RamBehavior_g => RamBehavior_g,
             IsAsync_g     => IsAsync_g,
-            RdLatency_g   => RdLatency_g,
+            RamRdLatency_g   => RamRdLatency_g,
             EccPipeline_g => EccPipeline_g
         )
         port map (
@@ -188,8 +192,9 @@ begin
             Wr_Addr       => Wr_Addr,
             Wr_Ena        => Wr_Ena,
             Wr_Data       => Wr_Data,
-            Wr_EccBitFlip => Wr_EccBitFlip,
-            Rd_Clk        => Rd_Clk,
+            ErrInj_BitFlip => ErrInj_BitFlip,
+            ErrInj_Valid   => ErrInj_Valid,
+            Rd_Clk         => Rd_Clk,
             Rd_Addr       => Rd_Addr,
             Rd_Ena        => Rd_Ena,
             Rd_Data       => Rd_Data,
@@ -240,7 +245,7 @@ begin
 
             -- Single bit error injection and correction
             elsif run("EccSec") then
-                writeWithFlip(20, 16#AB#, singleBit(0), Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                writeWithFlip(20, 16#AB#, singleBit(0), Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 if IsAsync_g then
                     checkEcc(20, 16#AB#, '1', '0', Rd_Clk, Rd_Addr, Rd_Data, Rd_EccSec, Rd_EccDed, "Sec flip0");
                 else
@@ -256,7 +261,7 @@ begin
 
             -- Double bit error detection
             elsif run("EccDed") then
-                writeWithFlip(30, 16#EF#, doubleBit(0, 1), Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                writeWithFlip(30, 16#EF#, doubleBit(0, 1), Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 if IsAsync_g then
                     checkDedOnly(30, '0', '1', Rd_Clk, Rd_Addr, Rd_EccSec, Rd_EccDed, "Ded");
                 else
@@ -275,7 +280,7 @@ begin
                 write(40, 16#01#, Clk, Wr_Addr, Wr_Data, Wr_Ena);
                 write(41, 16#02#, Clk, Wr_Addr, Wr_Data, Wr_Ena);
                 write(42, 16#03#, Clk, Wr_Addr, Wr_Data, Wr_Ena);
-                writeWithFlip(41, 16#02#, singleBit(0), Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                writeWithFlip(41, 16#02#, singleBit(0), Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 if IsAsync_g then
                     checkEcc(40, 16#01#, '0', '0', Rd_Clk, Rd_Addr, Rd_Data, Rd_EccSec, Rd_EccDed, "Multi addr40 clean");
                     checkEcc(41, 16#02#, '1', '0', Rd_Clk, Rd_Addr, Rd_Data, Rd_EccSec, Rd_EccDed, "Multi addr41 sec");
@@ -290,7 +295,7 @@ begin
             elsif run("SecAllBits") then
                 for bitIdx in 0 to CodewordWidth_c - 1 loop
                     writeWithFlip(bitIdx, 16#A5#, singleBit(bitIdx),
-                                  Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                                  Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                     if IsAsync_g then
                         checkEcc(bitIdx, 16#A5#, '1', '0', Rd_Clk, Rd_Addr, Rd_Data, Rd_EccSec, Rd_EccDed,
                                  "SecAllBits flip " & integer'image(bitIdx));
@@ -303,15 +308,15 @@ begin
             -- DED across a representative sample of bit pairs
             elsif run("DedSampledPairs") then
                 writeWithFlip(60, 16#5A#, doubleBit(0, 1),
-                              Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 writeWithFlip(61, 16#5A#, doubleBit(0, CodewordWidth_c - 1),
-                              Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 writeWithFlip(62, 16#5A#, doubleBit(1, 2),
-                              Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 writeWithFlip(63, 16#5A#, doubleBit(2, 5),
-                              Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 writeWithFlip(64, 16#5A#, doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1),
-                              Clk, Wr_Addr, Wr_Data, Wr_Ena, Wr_EccBitFlip);
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
                 if IsAsync_g then
                     checkDedOnly(60, '0', '1', Rd_Clk, Rd_Addr, Rd_EccSec, Rd_EccDed, "DedPair (0,1)");
                     checkDedOnly(61, '0', '1', Rd_Clk, Rd_Addr, Rd_EccSec, Rd_EccDed, "DedPair (0,N-1)");

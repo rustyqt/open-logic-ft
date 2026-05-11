@@ -67,10 +67,11 @@ architecture sim of olo_ft_ram_sp_scrub_tb is
     signal Clk           : std_logic                                              := '0';
     signal Rst           : std_logic                                              := '1';
     signal Addr          : std_logic_vector(log2ceil(Depth_c) - 1 downto 0)       := (others => '0');
-    signal WrEna         : std_logic                                              := '0';
-    signal WrData        : std_logic_vector(Width_g - 1 downto 0)                 := (others => '0');
-    signal WrEccBitFlip  : std_logic_vector(CodewordWidth_c - 1 downto 0)         := (others => '0');
-    signal RdData        : std_logic_vector(Width_g - 1 downto 0);
+    signal WrEna          : std_logic                                              := '0';
+    signal WrData         : std_logic_vector(Width_g - 1 downto 0)                 := (others => '0');
+    signal ErrInj_BitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0)         := (others => '0');
+    signal ErrInj_Valid   : std_logic                                              := '0';
+    signal RdData         : std_logic_vector(Width_g - 1 downto 0);
     signal RdEccSec      : std_logic;
     signal RdEccDed      : std_logic;
     signal Scrub_Stop    : std_logic                                              := '1';
@@ -92,16 +93,19 @@ architecture sim of olo_ft_ram_sp_scrub_tb is
         signal   Addr     : out   std_logic_vector;
         signal   WrData   : out   std_logic_vector;
         signal   WrEna    : out   std_logic;
-        signal   WrFlip   : out   std_logic_vector) is
+        signal   InjFlip  : out   std_logic_vector;
+        signal   InjValid : out   std_logic) is
     begin
         wait until rising_edge(Clk);
-        Addr   <= toUslv(address, Addr'length);
-        WrData <= toUslv(data, WrData'length);
-        WrEna  <= '1';
-        WrFlip <= flip;
+        Addr     <= toUslv(address, Addr'length);
+        WrData   <= toUslv(data, WrData'length);
+        WrEna    <= '1';
+        InjFlip  <= flip;
+        InjValid <= '1';
         wait until rising_edge(Clk);
-        WrEna  <= '0';
-        WrFlip <= (WrFlip'range => '0');
+        WrEna    <= '0';
+        InjFlip  <= (InjFlip'range => '0');
+        InjValid <= '0';
     end procedure;
 
     procedure read_word (
@@ -137,7 +141,7 @@ begin
         generic map (
             Depth_g       => Depth_c,
             Width_g       => Width_g,
-            RdLatency_g   => RdLatency_c,
+            RamRdLatency_g   => RdLatency_c,
             EccPipeline_g => EccPipeline_g,
             ScrubPeriod_g => ScrubPeriod_c,
             ScrubMode_g   => ScrubMode_g
@@ -148,7 +152,8 @@ begin
             Addr           => Addr,
             WrEna          => WrEna,
             WrData         => WrData,
-            WrEccBitFlip   => WrEccBitFlip,
+            ErrInj_BitFlip => ErrInj_BitFlip,
+            ErrInj_Valid   => ErrInj_Valid,
             RdData         => RdData,
             RdEccSec       => RdEccSec,
             RdEccDed       => RdEccDed,
@@ -189,9 +194,9 @@ begin
 
             -- Basic write/read with scrubber stopped
             if run("Basic") then
-                write_word(1, 16#11#, NoFlip_c, Clk, Addr, WrData, WrEna, WrEccBitFlip);
-                write_word(2, 16#22#, NoFlip_c, Clk, Addr, WrData, WrEna, WrEccBitFlip);
-                write_word(3, 16#33#, NoFlip_c, Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                write_word(1, 16#11#, NoFlip_c, Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
+                write_word(2, 16#22#, NoFlip_c, Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
+                write_word(3, 16#33#, NoFlip_c, Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                 read_word(1, 16#11#, '0', '0', "Basic addr1", Clk, Addr, RdData, RdEccSec, RdEccDed);
                 read_word(2, 16#22#, '0', '0', "Basic addr2", Clk, Addr, RdData, RdEccSec, RdEccDed);
                 read_word(3, 16#33#, '0', '0', "Basic addr3", Clk, Addr, RdData, RdEccSec, RdEccDed);
@@ -200,10 +205,10 @@ begin
             elsif run("ScrubFindsAndFixes") then
                 -- Initialize all addresses with clean data
                 for i in 0 to Depth_c - 1 loop
-                    write_word(i, i + 1, NoFlip_c, Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                    write_word(i, i + 1, NoFlip_c, Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                 end loop;
                 -- Inject single-bit error at address 5
-                write_word(5, 16#AB#, singleBit(0), Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                write_word(5, 16#AB#, singleBit(0), Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                 -- Verify read shows error (data corrected, but EccSec flagged)
                 read_word(5, 16#AB#, '1', '0', "Before scrub addr5", Clk, Addr, RdData, RdEccSec, RdEccDed);
                 -- Release scrubber and wait for one complete pass
@@ -217,7 +222,7 @@ begin
             -- Scrubber detects double-bit error
             elsif run("DedDetect") then
                 -- Inject double-bit error at address 7
-                write_word(7, 16#CD#, doubleBit(0, 1), Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                write_word(7, 16#CD#, doubleBit(0, 1), Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                 -- Release scrubber, wait for pass
                 Scrub_Stop <= '0';
                 wait until Scrub_PassDone = '1' and rising_edge(Clk);
@@ -270,7 +275,7 @@ begin
             elsif run("SecAllBits") then
                 for bitIdx in 0 to CodewordWidth_c - 1 loop
                     write_word(bitIdx mod Depth_c, 16#A5#, singleBit(bitIdx),
-                               Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                               Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                     read_word(bitIdx mod Depth_c, 16#A5#, '1', '0',
                               "SecAllBits flip " & integer'image(bitIdx),
                               Clk, Addr, RdData, RdEccSec, RdEccDed);
@@ -282,16 +287,16 @@ begin
                 for pair in 0 to 4 loop
                     case pair is
                         when 0      => write_word(pair, 16#5A#, doubleBit(0, 1),
-                                                  Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                                                  Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                         when 1      => write_word(pair, 16#5A#, doubleBit(0, CodewordWidth_c - 1),
-                                                  Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                                                  Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                         when 2      => write_word(pair, 16#5A#, doubleBit(1, 2),
-                                                  Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                                                  Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                         when 3      => write_word(pair, 16#5A#, doubleBit(2, 5),
-                                                  Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                                                  Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                         when others => write_word(pair, 16#5A#,
                                                   doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1),
-                                                  Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                                                  Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                     end case;
                     wait until rising_edge(Clk);
                     Addr <= toUslv(pair, Addr'length);
@@ -307,7 +312,7 @@ begin
             elsif run("InterleavedAccess") then
                 -- Initialize
                 for i in 0 to Depth_c - 1 loop
-                    write_word(i, i * 3 + 1, NoFlip_c, Clk, Addr, WrData, WrEna, WrEccBitFlip);
+                    write_word(i, i * 3 + 1, NoFlip_c, Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
                 end loop;
                 -- Allow scrubber to run several passes between accesses
                 for pass in 1 to 3 loop

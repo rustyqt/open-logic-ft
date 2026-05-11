@@ -17,51 +17,51 @@ entities:
       Depth_g: 256
     configurations:
       - name: "w16-ecc0-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w32-ecc0-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w64-ecc0-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc0-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc1-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w32-ecc1-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w64-ecc1-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc1-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc0-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w32-ecc0-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w64-ecc0-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc0-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc1-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w32-ecc1-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w64-ecc1-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc1-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
 
@@ -73,51 +73,51 @@ entities:
       Depth_g: 256
     configurations:
       - name: "w16-ecc0-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w32-ecc0-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w64-ecc0-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc0-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc1-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w32-ecc1-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w64-ecc1-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc1-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc0-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w32-ecc0-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w64-ecc0-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc0-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc1-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w32-ecc1-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w64-ecc1-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc1-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
 
@@ -129,64 +129,64 @@ entities:
       Depth_g: 256
     configurations:
       - name: "w16-ecc0-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w32-ecc0-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 32, B_WrData: 32, A_WrEccBitFlip: 39, B_WrEccBitFlip: 39 }
         out_reduce: { A_RdData: 32, B_RdData: 32 }
       - name: "w64-ecc0-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 64, B_WrData: 64, A_WrEccBitFlip: 72, B_WrEccBitFlip: 72 }
         out_reduce: { A_RdData: 64, B_RdData: 64 }
       - name: "w128-ecc0-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 128, B_WrData: 128, A_WrEccBitFlip: 137, B_WrEccBitFlip: 137 }
         out_reduce: { A_RdData: 128, B_RdData: 128 }
       - name: "w16-ecc1-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w32-ecc1-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 32, B_WrData: 32, A_WrEccBitFlip: 39, B_WrEccBitFlip: 39 }
         out_reduce: { A_RdData: 32, B_RdData: 32 }
       - name: "w64-ecc1-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 64, B_WrData: 64, A_WrEccBitFlip: 72, B_WrEccBitFlip: 72 }
         out_reduce: { A_RdData: 64, B_RdData: 64 }
       - name: "w128-ecc1-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { A_WrData: 128, B_WrData: 128, A_WrEccBitFlip: 137, B_WrEccBitFlip: 137 }
         out_reduce: { A_RdData: 128, B_RdData: 128 }
       - name: "w16-ecc0-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w32-ecc0-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 32, B_WrData: 32, A_WrEccBitFlip: 39, B_WrEccBitFlip: 39 }
         out_reduce: { A_RdData: 32, B_RdData: 32 }
       - name: "w64-ecc0-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 64, B_WrData: 64, A_WrEccBitFlip: 72, B_WrEccBitFlip: 72 }
         out_reduce: { A_RdData: 64, B_RdData: 64 }
       - name: "w128-ecc0-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 128, B_WrData: 128, A_WrEccBitFlip: 137, B_WrEccBitFlip: 137 }
         out_reduce: { A_RdData: 128, B_RdData: 128 }
       - name: "w16-ecc1-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w32-ecc1-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 32, B_WrData: 32, A_WrEccBitFlip: 39, B_WrEccBitFlip: 39 }
         out_reduce: { A_RdData: 32, B_RdData: 32 }
       - name: "w64-ecc1-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 64, B_WrData: 64, A_WrEccBitFlip: 72, B_WrEccBitFlip: 72 }
         out_reduce: { A_RdData: 64, B_RdData: 64 }
       - name: "w128-ecc1-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { A_WrData: 128, B_WrData: 128, A_WrEccBitFlip: 137, B_WrEccBitFlip: 137 }
         out_reduce: { A_RdData: 128, B_RdData: 128 }
 
   # ============================================================
-  # olo_ft_fifo_sync  (no RdLatency_g generic)
+  # olo_ft_fifo_sync  (no RamRdLatency_g generic)
   # ============================================================
   - entity_name: "olo_ft_fifo_sync"
     fixed_generics:
@@ -218,7 +218,7 @@ entities:
         out_reduce: { Out_Data: 128 }
 
   # ============================================================
-  # olo_ft_fifo_async  (no RdLatency_g; Depth must be power of 2)
+  # olo_ft_fifo_async  (no RamRdLatency_g; Depth must be power of 2)
   # ============================================================
   - entity_name: "olo_ft_fifo_async"
     fixed_generics:
@@ -250,7 +250,7 @@ entities:
         out_reduce: { Out_Data: 128 }
 
   # ============================================================
-  # olo_ft_fifo_packet  (no RdLatency_g; Depth must be power of 2)
+  # olo_ft_fifo_packet  (no RamRdLatency_g; Depth must be power of 2)
   # ============================================================
   - entity_name: "olo_ft_fifo_packet"
     fixed_generics:
@@ -289,51 +289,51 @@ entities:
       Depth_g: 256
     configurations:
       - name: "w16-ecc0-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w32-ecc0-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w64-ecc0-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc0-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc1-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w32-ecc1-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w64-ecc1-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc1-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc0-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w32-ecc0-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w64-ecc0-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc0-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
       - name: "w16-ecc1-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w32-ecc1-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w64-ecc1-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { WrData: 64, WrEccBitFlip: 72 }
         out_reduce: { RdData: 64 }
       - name: "w128-ecc1-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { WrData: 128, WrEccBitFlip: 137 }
         out_reduce: { RdData: 128 }
 
@@ -393,50 +393,50 @@ entities:
       Depth_g: 256
     configurations:
       - name: "w16-ecc0-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w32-ecc0-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 1 }
       - name: "w64-ecc0-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc0-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc1-lat1"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w32-ecc1-lat1"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 1 }
       - name: "w64-ecc1-lat1"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc1-lat1"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 1 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 1 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc0-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w32-ecc0-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 0, RamRdLatency_g: 2 }
       - name: "w64-ecc0-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc0-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 0, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 0, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }
       - name: "w16-ecc1-lat2"
-        generics: { Width_g: 16, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 16, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w32-ecc1-lat2"
-        generics: { Width_g: 32, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 32, EccPipeline_g: 1, RamRdLatency_g: 2 }
       - name: "w64-ecc1-lat2"
-        generics: { Width_g: 64, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 64, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 64, Wr_EccBitFlip: 72 }
         out_reduce: { Rd_Data: 64 }
       - name: "w128-ecc1-lat2"
-        generics: { Width_g: 128, EccPipeline_g: 1, RdLatency_g: 2 }
+        generics: { Width_g: 128, EccPipeline_g: 1, RamRdLatency_g: 2 }
         in_reduce: { Wr_Data: 128, Wr_EccBitFlip: 137 }
         out_reduce: { Rd_Data: 128 }

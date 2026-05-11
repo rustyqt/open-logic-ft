@@ -26,10 +26,10 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Depth_g       | positive | -       | Number of addresses the RAM has                              |
 | Width_g       | positive | -       | Number of data bits stored per address (word-width). The internal RAM is wider to accommodate ECC parity bits. |
 | IsAsync_g     | boolean  | false   | When _true_, the read port runs on a separate clock (_Rd_Clk_). |
-| RdLatency_g   | positive | 1       | Read latency inside the RAM. Higher values can help close timing. |
+| RamRdLatency_g   | positive | 1       | Read latency inside the RAM. Higher values can help close timing. |
 | RamStyle_g    | string   | "auto"  | Controls the RAM implementation resource. Passed through to [olo_base_ram_sdp](../base/olo_base_ram_sdp.md). |
 | RamBehavior_g | string   | "RBW"   | Controls the RAM behavior. <br>"RBW": Read-before-write<br>"WBR": Write-before-read |
-| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path. Total read latency becomes _RdLatency_g_ + _EccPipeline_g_. |
+| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path. Total read latency becomes _RamRdLatency_g_ + _EccPipeline_g_. |
 
 ## Interfaces
 
@@ -41,7 +41,7 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Wr_Addr       | in     | _ceil(log2(Depth_g))_ | -       | Write address                                                |
 | Wr_Ena        | in     | 1                     | '1'     | Write enable                                                 |
 | Wr_Data       | in     | _Width_g_             | -       | Write data                                                   |
-| Wr_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
+| ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_tdp - Error Injection](./olo_ft_ram_tdp.md#error-injection). |
 
 ### Read Port
 
@@ -51,6 +51,7 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Rd_Addr   | in     | _ceil(log2(Depth_g))_ | -       | Read address                                                 |
 | Rd_Ena    | in     | 1                     | '1'     | Read enable                                                  |
 | Rd_Data   | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)     |
+| Rd_Valid  | out    | 1                     | N/A     | Read-data valid flag. '1' on cycles when _Rd_Data_/_Rd_EccSec_/_Rd_EccDed_ correspond to a user-issued read (_Rd_Ena_ delayed by _RamRdLatency_g_+_EccPipeline_g_). |
 | Rd_EccSec | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
 | Rd_EccDed | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
 

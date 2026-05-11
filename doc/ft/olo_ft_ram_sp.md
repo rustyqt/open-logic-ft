@@ -25,10 +25,10 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | :------------ | :------- | ------- | :----------------------------------------------------------- |
 | Depth_g       | positive | -       | Number of addresses the RAM has                              |
 | Width_g       | positive | -       | Number of data bits stored per address (word-width). The internal RAM is wider to accommodate ECC parity bits. |
-| RdLatency_g   | positive | 1       | Read latency inside the RAM. Higher values can help close timing. |
+| RamRdLatency_g   | positive | 1       | Read latency inside the RAM. Higher values can help close timing. |
 | RamStyle_g    | string   | "auto"  | Controls the RAM implementation resource. Passed through to [olo_base_ram_sp](../base/olo_base_ram_sp.md). |
 | RamBehavior_g | string   | "RBW"   | Controls the RAM behavior. <br>"RBW": Read-before-write<br>"WBR": Write-before-read |
-| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path. Total read latency becomes _RdLatency_g_ + _EccPipeline_g_. |
+| EccPipeline_g | natural  | 0       | Number of pipeline stages after ECC decode. <br>0 = combinational output (default). <br>1+ = adds register stages to break the critical path. Total read latency becomes _RamRdLatency_g_ + _EccPipeline_g_. |
 
 ## Interfaces
 
@@ -38,8 +38,9 @@ This is useful in **radiation-hardened** designs where single-event upsets (SEUs
 | Addr         | in     | _ceil(log2(Depth_g))_ | -       | Address                                                      |
 | WrEna        | in     | 1                     | '1'     | Write enable                                                 |
 | WrData       | in     | _Width_g_             | -       | Write data                                                   |
-| WrEccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable.<br>See [Error Injection](#error-injection). |
+| ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection for testing/BIST. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable.<br>See [Error Injection](#error-injection). |
 | RdData       | out    | _Width_g_             | N/A     | Read data (corrected if a single-bit error was detected)     |
+| RdValid      | out    | 1                     | N/A     | Read-data valid flag. '1' on cycles when _RdData_/_RdEccSec_/_RdEccDed_ correspond to a user-issued read. |
 | RdEccSec     | out    | 1                     | N/A     | Single error corrected flag. '1' when a single-bit error was detected and corrected. |
 | RdEccDed     | out    | 1                     | N/A     | Double error detected flag. '1' when an uncorrectable double-bit error was detected. Read data is unreliable in this case. |
 
@@ -53,12 +54,12 @@ Read path:   wider internal RAM -> eccSyndromeAndParity -> eccCorrectData + EccS
 ```
 
 The ECC encoding is combinational on the write path. The internal RAM (an instance of _olo_base_ram_sp_ with wider
-word) provides the configurable read pipeline (_RdLatency_g_). The ECC decoding is combinational after the read
+word) provides the configurable read pipeline (_RamRdLatency_g_). The ECC decoding is combinational after the read
 pipeline, so the error flags are time-aligned with the read data.
 
 When _EccPipeline_g_ > 0, additional register stages are inserted after the ECC decode logic. This breaks the
 combinational path between the RAM output and the corrected data output, which can help close timing at high clock
-frequencies. The total read latency becomes _RdLatency_g_ + _EccPipeline_g_ clock cycles.
+frequencies. The total read latency becomes _RamRdLatency_g_ + _EccPipeline_g_ clock cycles.
 
 ### ECC Overhead
 
@@ -74,17 +75,17 @@ The SECDED Hamming code adds parity bits to each stored word:
 
 ### Error Injection
 
-The _WrEccBitFlip_ port allows arbitrary bit-flip patterns to be XORed into the stored codeword on each write. This is
+The _ErrInj_BitFlip_ port allows arbitrary bit-flip patterns to be XORed into the stored codeword on each write. This is
 useful for testing the ECC mechanism in simulation and for built-in self-test (BIST) in hardware. The port is the
 full codeword width (_eccCodewordWidth(Width_g)_), so any bit position can be exercised - which is needed to
 fully verify the SECDED codec.
 
-| Popcount of WrEccBitFlip | Meaning              | Behavior                                                        |
+| Popcount of ErrInj_BitFlip | Meaning              | Behavior                                                        |
 | :----------------------- | :------------------- | :-------------------------------------------------------------- |
 | 0                        | No injection         | Codeword stored unchanged. _RdEccSec_ = '0', _RdEccDed_ = '0'.  |
 | 1                        | Single-bit error     | SEC-correctable. _RdEccSec_ = '1', _RdEccDed_ = '0', data corrected. |
 | 2                        | Double-bit error     | DED-detectable. _RdEccSec_ = '0', _RdEccDed_ = '1', data unreliable. |
-| ≥ 3                      | Outside SECDED range | Detection behavior is undefined - the SECDED Hamming code only guarantees correct classification for at most 2 bit errors. |
+| â‰¥ 3                      | Outside SECDED range | Detection behavior is undefined - the SECDED Hamming code only guarantees correct classification for at most 2 bit errors. |
 
 Codeword bit 0 is the overall parity bit, bits at power-of-2 positions (1, 2, 4, 8, ...) are Hamming parity bits, and
 all remaining positions hold data bits. See [olo_ft_pkg_ecc](./olo_ft_pkg_ecc.md) for the full codeword layout.

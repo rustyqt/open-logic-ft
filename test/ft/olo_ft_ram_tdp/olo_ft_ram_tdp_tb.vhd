@@ -27,7 +27,7 @@ entity olo_ft_ram_tdp_tb is
         runner_cfg    : string;
         Width_g       : positive range 5 to 128 := 32;
         RamBehavior_g : string                  := "RBW";
-        RdLatency_g   : positive range 1 to 2   := 1;
+        RamRdLatency_g   : positive range 1 to 2   := 1;
         EccPipeline_g : natural range 0 to 1    := 0
     );
 end entity;
@@ -81,25 +81,28 @@ architecture sim of olo_ft_ram_tdp_tb is
     end procedure;
 
     procedure writeWithFlip (
-        address       : natural;
-        data          : natural;
-        flipBits      : std_logic_vector;
-        signal Clk    : in std_logic;
-        signal Addr   : out std_logic_vector;
-        signal WrData : out std_logic_vector;
-        signal WrEna  : out std_logic;
-        signal WrFlip : out std_logic_vector) is
+        address         : natural;
+        data            : natural;
+        flipBits        : std_logic_vector;
+        signal Clk      : in std_logic;
+        signal Addr     : out std_logic_vector;
+        signal WrData   : out std_logic_vector;
+        signal WrEna    : out std_logic;
+        signal InjFlip  : out std_logic_vector;
+        signal InjValid : out std_logic) is
     begin
         wait until rising_edge(Clk);
-        Addr   <= toUslv(address, Addr'length);
-        WrData <= toUslv(data, WrData'length);
-        WrEna  <= '1';
-        WrFlip <= flipBits;
+        Addr     <= toUslv(address, Addr'length);
+        WrData   <= toUslv(data, WrData'length);
+        WrEna    <= '1';
+        InjFlip  <= flipBits;
+        InjValid <= '1';
         wait until rising_edge(Clk);
-        WrEna  <= '0';
-        WrFlip <= (WrFlip'range => '0');
-        Addr   <= toUslv(0, Addr'length);
-        WrData <= toUslv(0, WrData'length);
+        WrEna    <= '0';
+        InjFlip  <= (InjFlip'range => '0');
+        InjValid <= '0';
+        Addr     <= toUslv(0, Addr'length);
+        WrData   <= toUslv(0, WrData'length);
     end procedure;
 
     procedure checkEcc (
@@ -120,7 +123,7 @@ architecture sim of olo_ft_ram_tdp_tb is
         Addr <= toUslv(0, Addr'length);
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g + EccPipeline_g loop
+        for i in 1 to RamRdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -145,7 +148,7 @@ architecture sim of olo_ft_ram_tdp_tb is
         Addr <= toUslv(0, Addr'length);
 
         -- Wait for read data to arrive
-        for i in 1 to RdLatency_g + EccPipeline_g loop
+        for i in 1 to RamRdLatency_g + EccPipeline_g loop
             wait until rising_edge(Clk);
         end loop;
 
@@ -159,19 +162,21 @@ architecture sim of olo_ft_ram_tdp_tb is
     signal A_Clk           : std_logic                                := '0';
     signal A_Addr          : std_logic_vector(7 downto 0);
     signal A_WrEna         : std_logic                                := '0';
-    signal A_WrData        : std_logic_vector(Width_g - 1 downto 0);
-    signal A_WrEccBitFlip  : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
-    signal A_RdData        : std_logic_vector(Width_g - 1 downto 0);
-    signal A_RdEccSec      : std_logic;
-    signal A_RdEccDed      : std_logic;
-    signal B_Clk           : std_logic                                := '0';
-    signal B_Addr          : std_logic_vector(7 downto 0);
-    signal B_WrEna         : std_logic                                := '0';
-    signal B_WrData        : std_logic_vector(Width_g - 1 downto 0);
-    signal B_WrEccBitFlip  : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
-    signal B_RdData        : std_logic_vector(Width_g - 1 downto 0);
-    signal B_RdEccSec      : std_logic;
-    signal B_RdEccDed      : std_logic;
+    signal A_WrData         : std_logic_vector(Width_g - 1 downto 0);
+    signal A_ErrInj_BitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal A_ErrInj_Valid   : std_logic                                := '0';
+    signal A_RdData         : std_logic_vector(Width_g - 1 downto 0);
+    signal A_RdEccSec       : std_logic;
+    signal A_RdEccDed       : std_logic;
+    signal B_Clk            : std_logic                                := '0';
+    signal B_Addr           : std_logic_vector(7 downto 0);
+    signal B_WrEna          : std_logic                                := '0';
+    signal B_WrData         : std_logic_vector(Width_g - 1 downto 0);
+    signal B_ErrInj_BitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal B_ErrInj_Valid   : std_logic                                := '0';
+    signal B_RdData         : std_logic_vector(Width_g - 1 downto 0);
+    signal B_RdEccSec       : std_logic;
+    signal B_RdEccDed       : std_logic;
 
 begin
 
@@ -183,7 +188,7 @@ begin
             Depth_g       => 200,
             Width_g       => Width_g,
             RamBehavior_g => RamBehavior_g,
-            RdLatency_g   => RdLatency_g,
+            RamRdLatency_g   => RamRdLatency_g,
             EccPipeline_g => EccPipeline_g
         )
         port map (
@@ -191,18 +196,20 @@ begin
             A_Addr         => A_Addr,
             A_WrEna        => A_WrEna,
             A_WrData       => A_WrData,
-            A_WrEccBitFlip => A_WrEccBitFlip,
-            A_RdData       => A_RdData,
-            A_RdEccSec     => A_RdEccSec,
-            A_RdEccDed     => A_RdEccDed,
-            B_Clk          => B_Clk,
-            B_Addr         => B_Addr,
-            B_WrEna        => B_WrEna,
-            B_WrData       => B_WrData,
-            B_WrEccBitFlip => B_WrEccBitFlip,
-            B_RdData       => B_RdData,
-            B_RdEccSec     => B_RdEccSec,
-            B_RdEccDed     => B_RdEccDed
+            A_ErrInj_BitFlip => A_ErrInj_BitFlip,
+            A_ErrInj_Valid   => A_ErrInj_Valid,
+            A_RdData         => A_RdData,
+            A_RdEccSec       => A_RdEccSec,
+            A_RdEccDed       => A_RdEccDed,
+            B_Clk            => B_Clk,
+            B_Addr           => B_Addr,
+            B_WrEna          => B_WrEna,
+            B_WrData         => B_WrData,
+            B_ErrInj_BitFlip => B_ErrInj_BitFlip,
+            B_ErrInj_Valid   => B_ErrInj_Valid,
+            B_RdData         => B_RdData,
+            B_RdEccSec       => B_RdEccSec,
+            B_RdEccDed       => B_RdEccDed
         );
 
     -----------------------------------------------------------------------------------------------
@@ -272,24 +279,24 @@ begin
             -- Single bit error injection and correction via port A
             elsif run("EccSec-PortA") then
                 -- Inject single-bit flip (bit 0)
-                writeWithFlip(20, 16#AB#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                writeWithFlip(20, 16#AB#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 -- Read back: data corrected, EccSec flagged
                 checkEcc(20, 16#AB#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Sec A-A flip0");
                 -- Cross-port read
                 checkEcc(20, 16#AB#, '1', '0', B_Clk, B_Addr, B_RdData, B_RdEccSec, B_RdEccDed, "Sec A-B flip0");
                 -- Inject single-bit flip (bit 1)
-                writeWithFlip(21, 16#CD#, singleBit(1), A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                writeWithFlip(21, 16#CD#, singleBit(1), A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkEcc(21, 16#CD#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Sec A-A flip1");
 
             -- Single bit error injection via port B
             elsif run("EccSec-PortB") then
-                writeWithFlip(25, 16#EF#, singleBit(0), B_Clk, B_Addr, B_WrData, B_WrEna, B_WrEccBitFlip);
+                writeWithFlip(25, 16#EF#, singleBit(0), B_Clk, B_Addr, B_WrData, B_WrEna, B_ErrInj_BitFlip, B_ErrInj_Valid);
                 checkEcc(25, 16#EF#, '1', '0', B_Clk, B_Addr, B_RdData, B_RdEccSec, B_RdEccDed, "Sec B-B");
                 checkEcc(25, 16#EF#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Sec B-A");
 
             -- Overwrite corrects error
             elsif run("EccSec-Overwrite") then
-                writeWithFlip(30, 16#AB#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                writeWithFlip(30, 16#AB#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkEcc(30, 16#AB#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Sec before overwrite");
                 -- Overwrite with clean data
                 write(30, 16#AB#, A_Clk, A_Addr, A_WrData, A_WrEna);
@@ -298,7 +305,7 @@ begin
             -- Double bit error detection
             elsif run("EccDed") then
                 -- Inject double-bit flip
-                writeWithFlip(35, 16#EF#, doubleBit(0, 1), A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                writeWithFlip(35, 16#EF#, doubleBit(0, 1), A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 -- Read back: EccDed flagged, data unreliable
                 checkDedOnly(35, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "Ded A");
                 -- Cross-port
@@ -313,7 +320,7 @@ begin
                 write(41, 16#02#, A_Clk, A_Addr, A_WrData, A_WrEna);
                 write(42, 16#03#, A_Clk, A_Addr, A_WrData, A_WrEna);
                 -- Inject single error at address 41 only
-                writeWithFlip(41, 16#02#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                writeWithFlip(41, 16#02#, singleBit(0), A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkEcc(40, 16#01#, '0', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Multi addr40 clean");
                 checkEcc(41, 16#02#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Multi addr41 sec");
                 checkEcc(42, 16#03#, '0', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed, "Multi addr42 clean");
@@ -322,7 +329,7 @@ begin
             elsif run("SecAllBits") then
                 for bitIdx in 0 to CodewordWidth_c - 1 loop
                     writeWithFlip(bitIdx, 16#A5#, singleBit(bitIdx),
-                                  A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                                  A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                     checkEcc(bitIdx, 16#A5#, '1', '0', A_Clk, A_Addr, A_RdData, A_RdEccSec, A_RdEccDed,
                              "SecAllBits flip " & integer'image(bitIdx));
                 end loop;
@@ -330,19 +337,19 @@ begin
             -- DED across a representative sample of bit pairs (port A)
             elsif run("DedSampledPairs") then
                 writeWithFlip(60, 16#5A#, doubleBit(0, 1),
-                              A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                              A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkDedOnly(60, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "DedPair (0,1)");
                 writeWithFlip(61, 16#5A#, doubleBit(0, CodewordWidth_c - 1),
-                              A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                              A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkDedOnly(61, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "DedPair (0,N-1)");
                 writeWithFlip(62, 16#5A#, doubleBit(1, 2),
-                              A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                              A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkDedOnly(62, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "DedPair (1,2)");
                 writeWithFlip(63, 16#5A#, doubleBit(2, 5),
-                              A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                              A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkDedOnly(63, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "DedPair (2,5)");
                 writeWithFlip(64, 16#5A#, doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1),
-                              A_Clk, A_Addr, A_WrData, A_WrEna, A_WrEccBitFlip);
+                              A_Clk, A_Addr, A_WrData, A_WrEna, A_ErrInj_BitFlip, A_ErrInj_Valid);
                 checkDedOnly(64, '0', '1', A_Clk, A_Addr, A_RdEccSec, A_RdEccDed, "DedPair (mid,mid+1)");
 
             end if;

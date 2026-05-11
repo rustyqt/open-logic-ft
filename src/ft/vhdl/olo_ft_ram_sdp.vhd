@@ -26,7 +26,6 @@ library ieee;
 
 library work;
     use work.olo_base_pkg_math.all;
-    use work.olo_base_pkg_attribute.all;
     use work.olo_ft_pkg_ecc.all;
 
 ---------------------------------------------------------------------------------------------------
@@ -34,24 +33,26 @@ library work;
 ---------------------------------------------------------------------------------------------------
 entity olo_ft_ram_sdp is
     generic (
-        Depth_g       : positive;
-        Width_g       : positive;
-        IsAsync_g     : boolean  := false;
-        RdLatency_g   : positive := 1;
-        RamStyle_g    : string   := "auto";
-        RamBehavior_g : string   := "RBW";
-        EccPipeline_g : natural  := 0
+        Depth_g        : positive;
+        Width_g        : positive;
+        IsAsync_g      : boolean  := false;
+        RamRdLatency_g : positive := 1;
+        RamStyle_g     : string   := "auto";
+        RamBehavior_g  : string   := "RBW";
+        EccPipeline_g  : natural  := 0
     );
     port (
         Clk            : in    std_logic;
         Wr_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Wr_Ena         : in    std_logic                               := '1';
         Wr_Data        : in    std_logic_vector(Width_g - 1 downto 0);
-        Wr_EccBitFlip  : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        ErrInj_BitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        ErrInj_Valid   : in    std_logic                               := '0';
         Rd_Clk         : in    std_logic                               := '0';
         Rd_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Rd_Ena         : in    std_logic                               := '1';
         Rd_Data        : out   std_logic_vector(Width_g - 1 downto 0);
+        Rd_Valid       : out   std_logic;
         Rd_EccSec      : out   std_logic;
         Rd_EccDed      : out   std_logic
     );
@@ -62,52 +63,35 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of olo_ft_ram_sdp is
 
-    -- ECC constants
-    constant ParityBits_c    : positive := eccParityBits(Width_g);
-    constant CodewordWidth_c : positive := eccCodewordWidth(Width_g);
+    constant CodewordWidth_c    : positive := eccCodewordWidth(Width_g);
+    constant TotalReadLatency_c : positive := RamRdLatency_g + EccPipeline_g;
 
-    -- Write-side signals
-    signal Wr_Encoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
-    signal Wr_Injected : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal Wr_Codeword : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal Rd_Codeword : std_logic_vector(CodewordWidth_c - 1 downto 0);
 
-    -- Read-side signals
-    signal Rd_Encoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
-    signal Rd_SynPar   : std_logic_vector(ParityBits_c downto 0);
-    signal Rd_DataCorr : std_logic_vector(Width_g - 1 downto 0);
-    signal Rd_EccSecI  : std_logic;
-    signal Rd_EccDedI  : std_logic;
+    -- Error-injection latch (write clock domain)
+    signal ErrInj_Pending : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal ErrInj_Active  : std_logic_vector(CodewordWidth_c - 1 downto 0);
 
-    -- Read clock selection
+    signal RdValidPipe : std_logic_vector(1 to TotalReadLatency_c) := (others => '0');
+
     signal RdClk : std_logic;
 
 begin
 
-    -- Encode write data
-    Wr_Encoded <= eccEncode(Wr_Data);
+    -- Latch for ErrInj_BitFlip: applied on the next Wr_Ena='1' cycle, cleared afterwards.
+    ErrInj_Active <= ErrInj_BitFlip when ErrInj_Valid = '1' else ErrInj_Pending;
 
-    -- Error injection (XOR full bit-flip pattern into the encoded codeword for testing / BIST)
-    Wr_Injected <= Wr_Encoded xor Wr_EccBitFlip;
-
-    -- Internal RAM with wider codeword width
-    i_ram : entity work.olo_base_ram_sdp
-        generic map (
-            Depth_g       => Depth_g,
-            Width_g       => CodewordWidth_c,
-            IsAsync_g     => IsAsync_g,
-            RdLatency_g   => RdLatency_g,
-            RamStyle_g    => RamStyle_g,
-            RamBehavior_g => RamBehavior_g
-        )
-        port map (
-            Clk     => Clk,
-            Wr_Addr => Wr_Addr,
-            Wr_Ena  => Wr_Ena,
-            Wr_Data => Wr_Injected,
-            Rd_Clk  => Rd_Clk,
-            Rd_Addr => Rd_Addr,
-            Rd_Ena  => Rd_Ena,
-            Rd_Data => Rd_Encoded
-        );
+    p_pending : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            if Wr_Ena = '1' then
+                ErrInj_Pending <= (others => '0');
+            elsif ErrInj_Valid = '1' then
+                ErrInj_Pending <= ErrInj_BitFlip;
+            end if;
+        end if;
+    end process;
 
     -- Read clock selection
     g_rd_clk_async : if IsAsync_g generate
@@ -117,43 +101,65 @@ begin
         RdClk <= Clk;
     end generate;
 
-    -- Decode read data (combinational)
-    Rd_SynPar   <= eccSyndromeAndParity(Rd_Encoded, Width_g);
-    Rd_DataCorr <= eccCorrectData(Rd_Encoded, Rd_SynPar, Width_g);
-    Rd_EccSecI  <= eccSecError(Rd_SynPar);
-    Rd_EccDedI  <= eccDedError(Rd_SynPar);
+    -- Encode write data (combinational + injection)
+    i_enc : entity work.olo_ft_ecc_encode
+        generic map (
+            Width_g    => Width_g,
+            Pipeline_g => 0
+        )
+        port map (
+            Clk          => Clk,
+            In_Data      => Wr_Data,
+            In_BitFlip   => ErrInj_Active,
+            Out_Codeword => Wr_Codeword
+        );
 
-    -- No ECC pipeline: direct output
-    g_no_ecc_pipe : if EccPipeline_g = 0 generate
-        Rd_Data   <= Rd_DataCorr;
-        Rd_EccSec<= Rd_EccSecI;
-        Rd_EccDed<= Rd_EccDedI;
-    end generate;
+    -- Internal RAM with codeword-wide word
+    i_ram : entity work.olo_base_ram_sdp
+        generic map (
+            Depth_g       => Depth_g,
+            Width_g       => CodewordWidth_c,
+            IsAsync_g     => IsAsync_g,
+            RdLatency_g   => RamRdLatency_g,
+            RamStyle_g    => RamStyle_g,
+            RamBehavior_g => RamBehavior_g
+        )
+        port map (
+            Clk     => Clk,
+            Wr_Addr => Wr_Addr,
+            Wr_Ena  => Wr_Ena,
+            Wr_Data => Wr_Codeword,
+            Rd_Clk  => Rd_Clk,
+            Rd_Addr => Rd_Addr,
+            Rd_Ena  => Rd_Ena,
+            Rd_Data => Rd_Codeword
+        );
 
-    -- ECC pipeline: register stages after decode
-    g_ecc_pipe : if EccPipeline_g > 0 generate
-        type Data_t is array (natural range <>) of std_logic_vector(Width_g - 1 downto 0);
-        signal DataPipe   : Data_t(1 to EccPipeline_g);
-        signal EccSecPipe : std_logic_vector(1 to EccPipeline_g);
-        signal EccDedPipe : std_logic_vector(1 to EccPipeline_g);
-        attribute shreg_extract of DataPipe   : signal is ShregExtract_SuppressExtraction_c;
-        attribute shreg_extract of EccSecPipe : signal is ShregExtract_SuppressExtraction_c;
-        attribute shreg_extract of EccDedPipe : signal is ShregExtract_SuppressExtraction_c;
+    -- Decode read data (with optional pipeline, on read clock)
+    i_dec : entity work.olo_ft_ecc_decode
+        generic map (
+            Width_g    => Width_g,
+            Pipeline_g => EccPipeline_g
+        )
+        port map (
+            Clk         => RdClk,
+            In_Codeword => Rd_Codeword,
+            Out_Data    => Rd_Data,
+            Out_EccSec  => Rd_EccSec,
+            Out_EccDed  => Rd_EccDed
+        );
+
+    -- Read-valid pipeline: tracks Rd_Ena delayed to align with Rd_Data/Rd_EccSec/Rd_EccDed.
+    p_rd_valid : process (RdClk) is
     begin
-        p_ecc_pipe : process (RdClk) is
-        begin
-            if rising_edge(RdClk) then
-                DataPipe(1)   <= Rd_DataCorr;
-                EccSecPipe(1) <= Rd_EccSecI;
-                EccDedPipe(1) <= Rd_EccDedI;
-                DataPipe(2 to EccPipeline_g)   <= DataPipe(1 to EccPipeline_g - 1);
-                EccSecPipe(2 to EccPipeline_g) <= EccSecPipe(1 to EccPipeline_g - 1);
-                EccDedPipe(2 to EccPipeline_g) <= EccDedPipe(1 to EccPipeline_g - 1);
-            end if;
-        end process;
-        Rd_Data   <= DataPipe(EccPipeline_g);
-        Rd_EccSec<= EccSecPipe(EccPipeline_g);
-        Rd_EccDed<= EccDedPipe(EccPipeline_g);
-    end generate;
+        if rising_edge(RdClk) then
+            RdValidPipe(1) <= Rd_Ena;
+            for i in 2 to TotalReadLatency_c loop
+                RdValidPipe(i) <= RdValidPipe(i - 1);
+            end loop;
+        end if;
+    end process;
+
+    Rd_Valid <= RdValidPipe(TotalReadLatency_c);
 
 end architecture;

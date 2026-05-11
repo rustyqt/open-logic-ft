@@ -46,7 +46,7 @@ flags indicate whether a single-bit error was corrected or a double-bit error wa
 | In_Data       | in     | _Width_g_               | -       | Input data                                                   |
 | In_Valid      | in     | 1                       | '1'     | Input valid                                                  |
 | In_Ready      | out    | 1                       | N/A     | Input ready                                                  |
-| In_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
+| In_ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 | In_Full       | out    | 1                       | N/A     | FIFO full (input side)                                       |
 | In_Empty      | out    | 1                       | N/A     | FIFO empty (input side)                                      |
 | In_AlmFull    | out    | 1                       | N/A     | Almost full (input side)                                     |

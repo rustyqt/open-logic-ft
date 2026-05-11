@@ -46,26 +46,27 @@ entity olo_ft_fifo_sync is
     );
     port (
         -- Control Ports
-        Clk           : in    std_logic;
-        Rst           : in    std_logic;
+        Clk              : in    std_logic;
+        Rst              : in    std_logic;
         -- Input Data
-        In_Data       : in    std_logic_vector(Width_g - 1 downto 0);
-        In_Valid      : in    std_logic                                        := '1';
-        In_Ready      : out   std_logic;
-        In_Level      : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
-        In_EccBitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        In_Data          : in    std_logic_vector(Width_g - 1 downto 0);
+        In_Valid         : in    std_logic                                        := '1';
+        In_Ready         : out   std_logic;
+        In_Level         : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
+        In_ErrInj_BitFlip : in   std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        In_ErrInj_Valid  : in    std_logic                                        := '0';
         -- Output Data
-        Out_Data      : out   std_logic_vector(Width_g - 1 downto 0);
-        Out_Valid     : out   std_logic;
-        Out_Ready     : in    std_logic                                        := '1';
-        Out_Level     : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
-        Out_EccSec    : out   std_logic;
-        Out_EccDed    : out   std_logic;
+        Out_Data         : out   std_logic_vector(Width_g - 1 downto 0);
+        Out_Valid        : out   std_logic;
+        Out_Ready        : in    std_logic                                        := '1';
+        Out_Level        : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
+        Out_EccSec       : out   std_logic;
+        Out_EccDed       : out   std_logic;
         -- Status
-        Full          : out   std_logic;
-        AlmFull       : out   std_logic;
-        Empty         : out   std_logic;
-        AlmEmpty      : out   std_logic
+        Full             : out   std_logic;
+        AlmFull          : out   std_logic;
+        Empty            : out   std_logic;
+        AlmEmpty         : out   std_logic
     );
 end entity;
 
@@ -74,39 +75,60 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of olo_ft_fifo_sync is
 
-    -- ECC constants
-    constant ParityBits_c    : positive := eccParityBits(Width_g);
     constant CodewordWidth_c : positive := eccCodewordWidth(Width_g);
     constant PlWidth_c       : positive := Width_g + 2;
 
-    -- Encode signals
-    signal In_Encoded  : std_logic_vector(CodewordWidth_c - 1 downto 0);
-    signal In_Injected : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal In_Codeword     : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal In_Ready_int    : std_logic;
 
-    -- Base FIFO output signals
+    -- Error-injection latch (write side)
+    signal ErrInj_Pending  : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
+    signal ErrInj_Active   : std_logic_vector(CodewordWidth_c - 1 downto 0);
+
     signal Fifo_OutData  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal Fifo_OutValid : std_logic;
     signal Fifo_OutReady : std_logic;
 
-    -- Decoded signals (combinational)
-    signal Dec_SynPar : std_logic_vector(ParityBits_c downto 0);
     signal Dec_Data   : std_logic_vector(Width_g - 1 downto 0);
     signal Dec_EccSec : std_logic;
     signal Dec_EccDed : std_logic;
 
-    -- Pipeline bus (bundled: EccSec & EccDed & Data)
     signal Pl_InData  : std_logic_vector(PlWidth_c - 1 downto 0);
     signal Pl_OutData : std_logic_vector(PlWidth_c - 1 downto 0);
 
 begin
 
-    -- Encode write data
-    In_Encoded <= eccEncode(In_Data);
+    In_Ready <= In_Ready_int;
 
-    -- Error injection (XOR full bit-flip pattern into the encoded codeword for testing / BIST)
-    In_Injected <= In_Encoded xor In_EccBitFlip;
+    -- Active flip pattern: newly-loaded if In_ErrInj_Valid='1', else the pending one.
+    ErrInj_Active <= In_ErrInj_BitFlip when In_ErrInj_Valid = '1' else ErrInj_Pending;
 
-    -- Base FIFO with wider codeword width
+    -- A "write" happens on a handshake beat (In_Valid='1' AND In_Ready='1').
+    p_pending : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            if In_Valid = '1' and In_Ready_int = '1' then
+                ErrInj_Pending <= (others => '0');
+            elsif In_ErrInj_Valid = '1' then
+                ErrInj_Pending <= In_ErrInj_BitFlip;
+            end if;
+        end if;
+    end process;
+
+    -- Encode write data (combinational + injection)
+    i_enc : entity work.olo_ft_ecc_encode
+        generic map (
+            Width_g    => Width_g,
+            Pipeline_g => 0
+        )
+        port map (
+            Clk          => Clk,
+            In_Data      => In_Data,
+            In_BitFlip   => ErrInj_Active,
+            Out_Codeword => In_Codeword
+        );
+
+    -- Base FIFO with codeword-wide word
     i_fifo : entity work.olo_base_fifo_sync
         generic map (
             Width_g         => CodewordWidth_c,
@@ -122,9 +144,9 @@ begin
         port map (
             Clk       => Clk,
             Rst       => Rst,
-            In_Data   => In_Injected,
+            In_Data   => In_Codeword,
             In_Valid  => In_Valid,
-            In_Ready  => In_Ready,
+            In_Ready  => In_Ready_int,
             In_Level  => In_Level,
             Out_Data  => Fifo_OutData,
             Out_Valid => Fifo_OutValid,
@@ -136,13 +158,21 @@ begin
             AlmEmpty  => AlmEmpty
         );
 
-    -- ECC decode (combinational)
-    Dec_SynPar <= eccSyndromeAndParity(Fifo_OutData, Width_g);
-    Dec_Data   <= eccCorrectData(Fifo_OutData, Dec_SynPar, Width_g);
-    Dec_EccSec <= eccSecError(Dec_SynPar);
-    Dec_EccDed <= eccDedError(Dec_SynPar);
+    -- Combinational decode
+    i_dec : entity work.olo_ft_ecc_decode
+        generic map (
+            Width_g    => Width_g,
+            Pipeline_g => 0
+        )
+        port map (
+            Clk         => Clk,
+            In_Codeword => Fifo_OutData,
+            Out_Data    => Dec_Data,
+            Out_EccSec  => Dec_EccSec,
+            Out_EccDed  => Dec_EccDed
+        );
 
-    -- Bundle decoded data and error flags for pipeline
+    -- Bundle decoded data and error flags for the handshaked output pipeline
     Pl_InData <= Dec_EccSec & Dec_EccDed & Dec_Data;
 
     -- Pipeline stage with Valid/Ready handshaking (0 stages = passthrough)
@@ -162,7 +192,6 @@ begin
             Out_Data  => Pl_OutData
         );
 
-    -- Unbundle output
     Out_Data   <= Pl_OutData(Width_g - 1 downto 0);
     Out_EccDed <= Pl_OutData(Width_g);
     Out_EccSec <= Pl_OutData(Width_g + 1);

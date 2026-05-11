@@ -68,7 +68,8 @@ architecture sim of olo_ft_fifo_packet_tb is
     signal In_Last       : std_logic                                              := '0';
     signal In_Drop       : std_logic                                              := '0';
     signal In_IsDropped  : std_logic;
-    signal In_EccBitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0)         := (others => '0');
+    signal In_ErrInj_BitFlip : std_logic_vector(CodewordWidth_c - 1 downto 0)         := (others => '0');
+    signal In_ErrInj_Valid   : std_logic                                                := '0';
     signal Out_Valid     : std_logic;
     signal Out_Ready     : std_logic                                              := '0';
     signal Out_Data      : std_logic_vector(Width_g - 1 downto 0);
@@ -102,7 +103,8 @@ begin
             In_Last       => In_Last,
             In_Drop       => In_Drop,
             In_IsDropped  => In_IsDropped,
-            In_EccBitFlip => In_EccBitFlip,
+            In_ErrInj_BitFlip => In_ErrInj_BitFlip,
+            In_ErrInj_Valid   => In_ErrInj_Valid,
             Out_Valid     => Out_Valid,
             Out_Ready     => Out_Ready,
             Out_Data      => Out_Data,
@@ -181,11 +183,13 @@ begin
                 In_Data       <= toUslv(16#AB#, Width_g);
                 In_Valid      <= '1';
                 In_Last       <= '0';
-                In_EccBitFlip <= singleBit(0);
+                In_ErrInj_BitFlip <= singleBit(0);
+                In_ErrInj_Valid   <= '1';
                 wait until rising_edge(Clk);
                 In_Data       <= toUslv(16#CD#, Width_g);
                 In_Last       <= '1';
-                In_EccBitFlip <= (others => '0');
+                In_ErrInj_BitFlip <= (others => '0');
+                In_ErrInj_Valid   <= '0';
                 wait until rising_edge(Clk);
                 In_Valid <= '0';
                 In_Last  <= '0';
@@ -210,11 +214,13 @@ begin
                 In_Data       <= toUslv(16#EF#, Width_g);
                 In_Valid      <= '1';
                 In_Last       <= '1';
-                In_EccBitFlip <= doubleBit(0, 1);
+                In_ErrInj_BitFlip <= doubleBit(0, 1);
+                In_ErrInj_Valid   <= '1';
                 wait until rising_edge(Clk);
                 In_Valid      <= '0';
                 In_Last       <= '0';
-                In_EccBitFlip <= (others => '0');
+                In_ErrInj_BitFlip <= (others => '0');
+                In_ErrInj_Valid   <= '0';
                 wait until rising_edge(Clk);
                 wait until rising_edge(Clk);
 
@@ -233,11 +239,13 @@ begin
                     In_Data       <= toUslv(16#A5#, Width_g);
                     In_Valid      <= '1';
                     In_Last       <= '1';
-                    In_EccBitFlip <= singleBit(bitIdx);
+                    In_ErrInj_BitFlip <= singleBit(bitIdx);
+                    In_ErrInj_Valid   <= '1';
                     wait until rising_edge(Clk);
                     In_Valid      <= '0';
                     In_Last       <= '0';
-                    In_EccBitFlip <= (others => '0');
+                    In_ErrInj_BitFlip <= (others => '0');
+                    In_ErrInj_Valid   <= '0';
                     wait until rising_edge(Clk) and Out_Valid = '1';
                     check_equal(Out_Data, toUslv(16#A5#, Width_g),
                                 "SecAllBits data flip " & integer'image(bitIdx));
@@ -254,16 +262,18 @@ begin
                     In_Valid <= '1';
                     In_Last  <= '1';
                     case pair is
-                        when 0 => In_EccBitFlip <= doubleBit(0, 1);
-                        when 1 => In_EccBitFlip <= doubleBit(0, CodewordWidth_c - 1);
-                        when 2 => In_EccBitFlip <= doubleBit(1, 2);
-                        when 3 => In_EccBitFlip <= doubleBit(2, 5);
-                        when others => In_EccBitFlip <= doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1);
+                        when 0 => In_ErrInj_BitFlip <= doubleBit(0, 1);
+                        when 1 => In_ErrInj_BitFlip <= doubleBit(0, CodewordWidth_c - 1);
+                        when 2 => In_ErrInj_BitFlip <= doubleBit(1, 2);
+                        when 3 => In_ErrInj_BitFlip <= doubleBit(2, 5);
+                        when others => In_ErrInj_BitFlip <= doubleBit(CodewordWidth_c / 2, CodewordWidth_c / 2 + 1);
                     end case;
+                    In_ErrInj_Valid <= '1';
                     wait until rising_edge(Clk);
                     In_Valid      <= '0';
                     In_Last       <= '0';
-                    In_EccBitFlip <= (others => '0');
+                    In_ErrInj_BitFlip <= (others => '0');
+                    In_ErrInj_Valid   <= '0';
                     wait until rising_edge(Clk) and Out_Valid = '1';
                     check_equal(Out_EccSec, '0', "DedPair EccSec pair " & integer'image(pair));
                     check_equal(Out_EccDed, '1', "DedPair EccDed pair " & integer'image(pair));

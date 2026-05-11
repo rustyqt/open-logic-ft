@@ -43,7 +43,7 @@ flags indicate whether a single-bit error was corrected or a double-bit error wa
 | In_Last       | in     | 1                          | '1'     | End of packet                                                |
 | In_Drop       | in     | 1                          | '0'     | Drop current packet                                          |
 | In_IsDropped  | out    | 1                          | N/A     | Indicates current input is being dropped                     |
-| In_EccBitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
+| In_ErrInj_BitFlip | in     | _eccCodewordWidth(Width_g)_ | (others => '0') | ECC error injection. Each '1' bit XORs (flips) the corresponding bit of the stored codeword. Popcount 1 = SEC-correctable, popcount 2 = DED-detectable. See [olo_ft_ram_sp - Error Injection](./olo_ft_ram_sp.md#error-injection). |
 | Out_Valid     | out    | 1                          | N/A     | Output valid                                                 |
 | Out_Ready     | in     | 1                          | '1'     | Output ready                                                 |
 | Out_Data      | out    | _Width_g_                  | N/A     | Output data (corrected if single-bit error detected)         |

@@ -47,7 +47,7 @@ entity olo_ft_ram_sdp_scrub is
     generic (
         Depth_g       : positive;
         Width_g       : positive;
-        RdLatency_g   : positive := 1;
+        RamRdLatency_g   : positive := 1;
         RamStyle_g    : string   := "auto";
         RamBehavior_g : string   := "RBW";
         EccPipeline_g : natural  := 0;
@@ -62,11 +62,13 @@ entity olo_ft_ram_sdp_scrub is
         Wr_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Wr_Ena         : in    std_logic                               := '0';
         Wr_Data        : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
-        Wr_EccBitFlip  : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        ErrInj_BitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        ErrInj_Valid   : in    std_logic                               := '0';
         -- User read interface (matches olo_ft_ram_sdp)
         Rd_Addr        : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Rd_Ena         : in    std_logic                               := '0';
         Rd_Data        : out   std_logic_vector(Width_g - 1 downto 0);
+        Rd_Valid       : out   std_logic;
         Rd_EccSec      : out   std_logic;
         Rd_EccDed      : out   std_logic;
         -- Scrubber arbitration
@@ -89,7 +91,7 @@ architecture rtl of olo_ft_ram_sdp_scrub is
     -----------------------------------------------------------------------------------------------
     -- Constants
     -----------------------------------------------------------------------------------------------
-    constant TotalReadLatency_c : positive := RdLatency_g + EccPipeline_g;
+    constant TotalReadLatency_c : positive := RamRdLatency_g + EccPipeline_g;
     constant AddrWidth_c        : positive := log2ceil(Depth_g);
     constant ModeAlways_c       : boolean  := compareNoCase(ScrubMode_g, "ALWAYS");
 
@@ -113,14 +115,19 @@ architecture rtl of olo_ft_ram_sdp_scrub is
     signal Ram_Wr_Addr : std_logic_vector(AddrWidth_c - 1 downto 0);
     signal Ram_Wr_Ena  : std_logic;
     signal Ram_Wr_Data : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_Wr_Flip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
+    signal Ram_ErrInjFlip : std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0);
+    signal Ram_ErrInjVld  : std_logic;
 
     -- Multiplexed RAM signals (read port)
-    signal Ram_Rd_Addr : std_logic_vector(AddrWidth_c - 1 downto 0);
-    signal Ram_Rd_Ena  : std_logic;
-    signal Ram_Rd_Data : std_logic_vector(Width_g - 1 downto 0);
-    signal Ram_Rd_Sec  : std_logic;
-    signal Ram_Rd_Ded  : std_logic;
+    signal Ram_Rd_Addr  : std_logic_vector(AddrWidth_c - 1 downto 0);
+    signal Ram_Rd_Ena   : std_logic;
+    signal Ram_Rd_Data  : std_logic_vector(Width_g - 1 downto 0);
+    signal Ram_Rd_Valid : std_logic;
+    signal Ram_Rd_Sec   : std_logic;
+    signal Ram_Rd_Ded   : std_logic;
+
+    -- User-facing read-valid pipeline (masks out scrubber cycles)
+    signal UserRdValidPipe : std_logic_vector(1 to TotalReadLatency_c) := (others => '0');
 
     -- Helper
     signal ScrubMaster   : std_logic;
@@ -242,7 +249,8 @@ begin
     Ram_Wr_Addr <= std_logic_vector(ScrubAddr_v) when ScrubMaster = '1' else Wr_Addr;
     Ram_Wr_Ena  <= ScrubWriteReq                 when ScrubMaster = '1' else Wr_Ena;
     Ram_Wr_Data <= CapturedData                  when ScrubMaster = '1' else Wr_Data;
-    Ram_Wr_Flip <= (Ram_Wr_Flip'range => '0')    when ScrubMaster = '1' else Wr_EccBitFlip;
+    Ram_ErrInjFlip <= (Ram_ErrInjFlip'range => '0') when ScrubMaster = '1' else ErrInj_BitFlip;
+    Ram_ErrInjVld  <= '0'                           when ScrubMaster = '1' else ErrInj_Valid;
 
     -- Read port mux
     Ram_Rd_Addr <= std_logic_vector(ScrubAddr_v) when ScrubMaster = '1' else Rd_Addr;
@@ -253,35 +261,51 @@ begin
     -----------------------------------------------------------------------------------------------
     i_ram : entity work.olo_ft_ram_sdp
         generic map (
-            Depth_g       => Depth_g,
-            Width_g       => Width_g,
-            IsAsync_g     => false,
-            RdLatency_g   => RdLatency_g,
+            Depth_g        => Depth_g,
+            Width_g        => Width_g,
+            IsAsync_g      => false,
+            RamRdLatency_g => RamRdLatency_g,
             RamStyle_g    => RamStyle_g,
             RamBehavior_g => RamBehavior_g,
             EccPipeline_g => EccPipeline_g
         )
         port map (
-            Clk           => Clk,
-            Wr_Addr       => Ram_Wr_Addr,
-            Wr_Ena        => Ram_Wr_Ena,
-            Wr_Data       => Ram_Wr_Data,
-            Wr_EccBitFlip => Ram_Wr_Flip,
-            Rd_Clk        => '0',
-            Rd_Addr       => Ram_Rd_Addr,
-            Rd_Ena        => Ram_Rd_Ena,
-            Rd_Data       => Ram_Rd_Data,
-            Rd_EccSec     => Ram_Rd_Sec,
-            Rd_EccDed     => Ram_Rd_Ded
+            Clk            => Clk,
+            Wr_Addr        => Ram_Wr_Addr,
+            Wr_Ena         => Ram_Wr_Ena,
+            Wr_Data        => Ram_Wr_Data,
+            ErrInj_BitFlip => Ram_ErrInjFlip,
+            ErrInj_Valid   => Ram_ErrInjVld,
+            Rd_Clk         => '0',
+            Rd_Addr        => Ram_Rd_Addr,
+            Rd_Ena         => Ram_Rd_Ena,
+            Rd_Data        => Ram_Rd_Data,
+            Rd_Valid       => Ram_Rd_Valid,
+            Rd_EccSec      => Ram_Rd_Sec,
+            Rd_EccDed      => Ram_Rd_Ded
         );
 
     -----------------------------------------------------------------------------------------------
     -- User read outputs
-    -- Pass through directly. The user is responsible for tracking RdLatency_g+EccPipeline_g
-    -- after issuing a read, exactly like a normal olo_ft_ram_sdp.
+    -- Data, SEC and DED flags are passed through directly. The user is responsible for tracking
+    -- RamRdLatency_g+EccPipeline_g after issuing a read, exactly like a normal olo_ft_ram_sdp.
+    -- Rd_Valid only pulses for user-initiated reads (cycles where the user asserted Rd_Ena while
+    -- the scrubber was idle); cycles consumed by the scrubber are masked out.
     -----------------------------------------------------------------------------------------------
     Rd_Data   <= Ram_Rd_Data;
     Rd_EccSec <= Ram_Rd_Sec;
     Rd_EccDed <= Ram_Rd_Ded;
+
+    p_user_rd_valid : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            UserRdValidPipe(1) <= (not ScrubMaster) and Rd_Ena;
+            for i in 2 to TotalReadLatency_c loop
+                UserRdValidPipe(i) <= UserRdValidPipe(i - 1);
+            end loop;
+        end if;
+    end process;
+
+    Rd_Valid <= UserRdValidPipe(TotalReadLatency_c);
 
 end architecture;
