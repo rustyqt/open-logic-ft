@@ -210,9 +210,10 @@ required.
    [Synplify application note on safe VHDL state machines](https://digsys.upc.edu/csd/P06/designing_safe_vhdl.pdf)
    for details.
 
-3. **Size the scrubbing period** based on the expected single-bit error rate for the target
-   radiation environment. Scrubbing is essential to prevent single-bit errors from accumulating
-   into uncorrectable double-bit errors in the block RAM.
+3. **Enable scrubbing on the protected RAM** (`olo_ft_ram_sdp` with `Scrub_g = true`) in any
+   data-buffer use case. Scrubbing is essential to prevent single-bit errors from accumulating
+   into uncorrectable double-bit errors in the block RAM. The integrated scrubber walks the
+   address space autonomously using idle cycles, so it imposes no extra timing requirement.
 
 ### References
 

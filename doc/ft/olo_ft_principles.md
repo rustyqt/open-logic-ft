@@ -106,8 +106,8 @@ Every ECC-protected RAM exposes a read-data-valid output (named _RdValid_, _Rd_V
 depending on the entity). It pulses '1' on the exact cycle when the matching _RdData_, _SEC_ and _DED_ outputs
 correspond to a read the user issued, i.e. it is the read-enable delayed by `RamRdLatency_g + EccPipeline_g`.
 
-For RAMs with a scrubber (`olo_ft_ram_sp_scrub`, `olo_ft_ram_sdp_scrub`), the valid signal is gated so that cycles
-consumed by the scrubber do not pulse on the user-facing valid line.
+For RAMs with the integrated scrubber enabled (`olo_ft_ram_sdp` with `Scrub_g = true`), the valid signal is gated
+so that cycles consumed by the scrubber do not pulse on the user-facing valid line.
 
 FIFO-based entities use the standard AXI4-Stream `Out_Valid` signal for the same purpose; no separate
 `*RdValid` port is needed.
