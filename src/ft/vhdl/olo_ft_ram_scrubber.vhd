@@ -98,32 +98,28 @@ architecture rtl of olo_ft_ram_scrubber is
     signal Collision    : std_logic;
     signal CapturedData : std_logic_vector(Width_g - 1 downto 0);
 
-    -- Combinational request flags (registered drivers fed by these go to ports)
+    -- Combinational request flags. User priority is enforced by gating on User_*_Ena so the
+    -- wrapper's mux can simply combine these with the user signals.
     signal IssueRead    : std_logic;
     signal IssueWrite   : std_logic;
 
-    -- Internal pulse for status outputs
-    signal SecPulse  : std_logic;
-    signal DedPulse  : std_logic;
-    signal DonePulse : std_logic;
-
 begin
 
-    -- The scrubber wants to issue a read in `Idle_s` whenever the user is not reading.
-    -- The mux in the wrapper still gives the user priority; we only assert when User_Rd_Ena='0'.
     IssueRead  <= '1' when (State = Idle_s) and (User_Rd_Ena = '0') else '0';
-
-    -- The scrubber wants to commit the corrected codeword in `WriteWait_s` on cycles where
-    -- the user is not writing AND no collision has been observed since the read.
     IssueWrite <= '1' when (State = WriteWait_s) and (User_Wr_Ena = '0') and (Collision = '0') else '0';
 
     p_fsm : process (Clk) is
     begin
         if rising_edge(Clk) then
-            -- Defaults (pulses)
-            SecPulse  <= '0';
-            DedPulse  <= '0';
-            DonePulse <= '0';
+
+            -- Snoop user writes to the in-flight address across the entire read-decode-writeback
+            -- window. Sticky: once set, stays set until the address is retired in Incr_s. This
+            -- guarantees the writeback either lands before any user write or is aborted.
+            if (State = ReadWait_s or State = WriteWait_s) and
+               (User_Wr_Ena = '1') and
+               (unsigned(User_Wr_Addr) = InFlightAddr) then
+                Collision <= '1';
+            end if;
 
             case State is
 
@@ -136,11 +132,6 @@ begin
                     end if;
 
                 when ReadWait_s =>
-                    if (User_Wr_Ena = '1') and
-                       (unsigned(User_Wr_Addr) = InFlightAddr) then
-                        Collision <= '1';
-                    end if;
-
                     if WaitCnt = TotalReadLatency_g - 1 then
                         State <= Decide_s;
                     else
@@ -148,10 +139,6 @@ begin
                     end if;
 
                 when Decide_s =>
-                    -- Decoded outputs are valid this cycle: capture & report.
-                    SecPulse <= Ram_Rd_EccSec;
-                    DedPulse <= Ram_Rd_EccDed;
-
                     -- ON_ERROR: only write back when SEC was corrected. DED is unreliable;
                     -- writing it back would silently commit a "valid" codeword over an
                     -- otherwise-detectable double-bit error. Collision means a user write
@@ -164,26 +151,16 @@ begin
                     end if;
 
                 when WriteWait_s =>
-                    -- Keep tracking collisions until the writeback actually commits.
-                    if (User_Wr_Ena = '1') and
-                       (unsigned(User_Wr_Addr) = InFlightAddr) then
-                        Collision <= '1';
-                    end if;
-
-                    if Collision = '1' then
-                        State <= Incr_s;
-                    elsif IssueWrite = '1' then
+                    if Collision = '1' or IssueWrite = '1' then
                         State <= Incr_s;
                     end if;
 
                 when Incr_s =>
                     if ScrubAddr = Depth_g - 1 then
                         ScrubAddr <= (others => '0');
-                        DonePulse <= '1';
                     else
                         ScrubAddr <= ScrubAddr + 1;
                     end if;
-
                     State <= Idle_s;
 
             end case;
@@ -198,15 +175,17 @@ begin
         end if;
     end process;
 
-    -- Output ports
+    -- Status pulses are driven combinationally so they appear on the same cycle as the event
+    -- that produced them (vs. an extra register delay). PassDone fires while the FSM is in
+    -- Incr_s with ScrubAddr about to wrap; Sec/Ded fire while in Decide_s.
     Scrub_Rd_Ena   <= IssueRead;
     Scrub_Rd_Addr  <= std_logic_vector(ScrubAddr);
     Scrub_Wr_Ena   <= IssueWrite;
     Scrub_Wr_Addr  <= std_logic_vector(InFlightAddr);
     Scrub_Wr_Data  <= CapturedData;
     Scrub_Active   <= '0' when State = Idle_s else '1';
-    Scrub_EccSec   <= SecPulse;
-    Scrub_EccDed   <= DedPulse;
-    Scrub_PassDone <= DonePulse;
+    Scrub_EccSec   <= Ram_Rd_EccSec when State = Decide_s else '0';
+    Scrub_EccDed   <= Ram_Rd_EccDed when State = Decide_s else '0';
+    Scrub_PassDone <= '1' when (State = Incr_s) and (ScrubAddr = Depth_g - 1) else '0';
 
 end architecture;
