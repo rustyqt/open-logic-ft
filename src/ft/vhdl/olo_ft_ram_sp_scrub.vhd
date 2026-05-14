@@ -41,38 +41,38 @@ library work;
 ---------------------------------------------------------------------------------------------------
 entity olo_ft_ram_sp_scrub is
     generic (
-        Depth_g       : positive;
-        Width_g       : positive;
-        RamRdLatency_g   : positive := 1;
-        RamStyle_g    : string   := "auto";
-        RamBehavior_g : string   := "RBW";
-        EccPipeline_g : natural  := 0;
-        ScrubPeriod_g : positive := 1024;
-        ScrubMode_g   : string   := "ON_ERROR"
+        Depth_g          : positive;
+        Width_g          : positive;
+        RamRdLatency_g   : positive             := 1;
+        RamStyle_g       : string               := "auto";
+        RamBehavior_g    : string               := "RBW";
+        EccPipeline_g    : natural range 0 to 2 := 0;
+        ScrubPeriod_g    : positive             := 1024;
+        ScrubMode_g      : string               := "ON_ERROR"
     );
     port (
         -- Control
-        Clk           : in    std_logic;
-        Rst           : in    std_logic;
+        Clk            : in    std_logic;
+        Rst            : in    std_logic;
         -- User interface (matches olo_ft_ram_sp)
-        Addr          : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        WrEna         : in    std_logic                               := '0';
-        WrData         : in    std_logic_vector(Width_g - 1 downto 0)  := (others => '0');
+        Addr           : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        WrEna          : in    std_logic                                                := '0';
+        WrData         : in    std_logic_vector(Width_g - 1 downto 0)                   := (others => '0');
         ErrInj_BitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
-        ErrInj_Valid   : in    std_logic                               := '0';
-        RdData        : out   std_logic_vector(Width_g - 1 downto 0);
-        RdValid       : out   std_logic;
-        RdEccSec      : out   std_logic;
-        RdEccDed      : out   std_logic;
+        ErrInj_Valid   : in    std_logic                                                := '0';
+        RdData         : out   std_logic_vector(Width_g - 1 downto 0);
+        RdValid        : out   std_logic;
+        RdEccSec       : out   std_logic;
+        RdEccDed       : out   std_logic;
         -- Scrubber arbitration
-        Scrub_Stop    : in    std_logic                               := '0';
-        Scrub_Stopped : out   std_logic;
+        Scrub_Stop     : in    std_logic                                                := '0';
+        Scrub_Stopped  : out   std_logic;
         -- Scrubber status
-        Scrub_Active  : out   std_logic;
-        Scrub_Addr    : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        Scrub_EccSec  : out   std_logic;
-        Scrub_EccDed  : out   std_logic;
-        Scrub_PassDone : out  std_logic
+        Scrub_Active   : out   std_logic;
+        Scrub_Addr     : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        Scrub_EccSec   : out   std_logic;
+        Scrub_EccDed   : out   std_logic;
+        Scrub_PassDone : out   std_logic
     );
 end entity;
 
@@ -97,7 +97,7 @@ architecture rtl of olo_ft_ram_sp_scrub is
     -- Signals
     -----------------------------------------------------------------------------------------------
     signal State        : State_t;
-    signal ScrubAddr_v  : unsigned(AddrWidth_c - 1 downto 0);
+    signal ScrubAddr    : unsigned(AddrWidth_c - 1 downto 0);
     signal PeriodCnt    : unsigned(log2ceil(ScrubPeriod_g + 1) - 1 downto 0);
     signal WaitCnt      : unsigned(log2ceil(TotalReadLatency_c + 1) - 1 downto 0);
     signal CapturedData : std_logic_vector(Width_g - 1 downto 0);
@@ -182,11 +182,11 @@ begin
                     State <= Incr_s;
 
                 when Incr_s =>
-                    if ScrubAddr_v = Depth_g - 1 then
-                        ScrubAddr_v    <= (others => '0');
+                    if ScrubAddr = Depth_g - 1 then
+                        ScrubAddr      <= (others => '0');
                         Scrub_PassDone <= '1';
                     else
-                        ScrubAddr_v <= ScrubAddr_v + 1;
+                        ScrubAddr <= ScrubAddr + 1;
                     end if;
                     -- After completing R-M-W, honor user stop request
                     if Scrub_Stop = '1' then
@@ -204,12 +204,12 @@ begin
 
             -- Reset
             if Rst = '1' then
-                State        <= Idle_s;
-                ScrubAddr_v  <= (others => '0');
-                PeriodCnt    <= (others => '0');
-                WaitCnt      <= (others => '0');
-                CapturedSec  <= '0';
-                CapturedDed  <= '0';
+                State       <= Idle_s;
+                ScrubAddr   <= (others => '0');
+                PeriodCnt   <= (others => '0');
+                WaitCnt     <= (others => '0');
+                CapturedSec <= '0';
+                CapturedDed <= '0';
             end if;
         end if;
     end process;
@@ -219,7 +219,7 @@ begin
     -----------------------------------------------------------------------------------------------
     Scrub_Stopped <= '1' when (State = Idle_s) or (State = Yielded_s) else '0';
     Scrub_Active  <= '0' when (State = Idle_s) or (State = Yielded_s) else '1';
-    Scrub_Addr    <= std_logic_vector(ScrubAddr_v);
+    Scrub_Addr    <= std_logic_vector(ScrubAddr);
 
     -----------------------------------------------------------------------------------------------
     -- Bus arbitration: scrubber drives the RAM during all active states
@@ -230,12 +230,11 @@ begin
     -- Never write on DedErr: the decoded data is unreliable (SECDED can't correct double-bit
     -- errors), and writing it back would silently corrupt memory with a "valid" codeword over
     -- a previously-detectable double-bit error.
-    ScrubWriteReq <= '1' when State = Write_s and CapturedDed = '0' and
-                              (ModeAlways_c or CapturedSec = '1')
-                     else '0';
+    ScrubWriteReq <= '1' when State = Write_s and CapturedDed = '0' and (ModeAlways_c or CapturedSec = '1') else
+                     '0';
 
     -- Address mux
-    Ram_Addr <= std_logic_vector(ScrubAddr_v) when ScrubMaster = '1' else Addr;
+    Ram_Addr <= std_logic_vector(ScrubAddr) when ScrubMaster = '1' else Addr;
 
     -- WrEna mux: scrubber only writes in Write_s, user passes through in idle/yielded
     Ram_WrEna <= ScrubWriteReq when ScrubMaster = '1' else WrEna;
@@ -261,6 +260,7 @@ begin
         )
         port map (
             Clk            => Clk,
+            Rst            => Rst,
             Addr           => Ram_Addr,
             WrEna          => Ram_WrEna,
             WrData         => Ram_WrData,
@@ -287,9 +287,11 @@ begin
     begin
         if rising_edge(Clk) then
             UserRdValidPipe(1) <= (not ScrubMaster) and (not WrEna);
+
             for i in 2 to TotalReadLatency_c loop
                 UserRdValidPipe(i) <= UserRdValidPipe(i - 1);
             end loop;
+
         end if;
     end process;
 

@@ -45,34 +45,35 @@ entity olo_ft_fifo_packet is
         SmallRamStyle_g    : string                            := "auto";
         SmallRamBehavior_g : string                            := "same";
         MaxPackets_g       : positive range 2 to positive'high := 17;
-        EccPipeline_g      : natural                           := 0
+        EccPipeline_g      : natural range 0 to 2              := 0
     );
     port (
         -- Control Ports
-        Clk           : in    std_logic;
-        Rst           : in    std_logic;
+        Clk               : in    std_logic;
+        Rst               : in    std_logic;
         -- Input Data
-        In_Valid      : in    std_logic                                        := '1';
-        In_Ready      : out   std_logic;
-        In_Data       : in    std_logic_vector(Width_g - 1 downto 0);
-        In_Last       : in    std_logic                                        := '1';
-        In_Drop       : in    std_logic                                        := '0';
-        In_IsDropped     : out   std_logic;
-        In_ErrInj_BitFlip : in   std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
-        In_ErrInj_Valid  : in    std_logic                                        := '0';
+        In_Valid          : in    std_logic                                                := '1';
+        In_Ready          : out   std_logic;
+        In_Data           : in    std_logic_vector(Width_g - 1 downto 0);
+        In_Last           : in    std_logic                                                := '1';
+        In_Drop           : in    std_logic                                                := '0';
+        In_IsDropped      : out   std_logic;
         -- Output Data
-        Out_Valid     : out   std_logic;
-        Out_Ready     : in    std_logic                                        := '1';
-        Out_Data      : out   std_logic_vector(Width_g - 1 downto 0);
-        Out_Size      : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
-        Out_Last      : out   std_logic;
-        Out_Next      : in    std_logic                                        := '0';
-        Out_Repeat    : in    std_logic                                        := '0';
-        Out_EccSec    : out   std_logic;
-        Out_EccDed    : out   std_logic;
+        Out_Valid         : out   std_logic;
+        Out_Ready         : in    std_logic                                                := '1';
+        Out_Data          : out   std_logic_vector(Width_g - 1 downto 0);
+        Out_Size          : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
+        Out_Last          : out   std_logic;
+        Out_Next          : in    std_logic                                                := '0';
+        Out_Repeat        : in    std_logic                                                := '0';
+        Out_EccSec        : out   std_logic;
+        Out_EccDed        : out   std_logic;
         -- Status
-        PacketLevel   : out   std_logic_vector(log2ceil(MaxPackets_g + 1) - 1 downto 0);
-        FreeWords     : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0)
+        PacketLevel       : out   std_logic_vector(log2ceil(MaxPackets_g + 1) - 1 downto 0);
+        FreeWords         : out   std_logic_vector(log2ceil(Depth_g + 1) - 1 downto 0);
+        -- Error injection (independent of the data handshake)
+        In_ErrInj_BitFlip : in    std_logic_vector(eccCodewordWidth(Width_g) - 1 downto 0) := (others => '0');
+        In_ErrInj_Valid   : in    std_logic                                                := '0'
     );
 end entity;
 
@@ -83,21 +84,22 @@ architecture rtl of olo_ft_fifo_packet is
 
     constant CodewordWidth_c : positive := eccCodewordWidth(Width_g);
     constant SizeWidth_c     : positive := log2ceil(Depth_g + 1);
+    -- Sideband bundle width: {EccSec, EccDed, Last, Size, Data}
     constant PlWidth_c       : positive := Width_g + 2 + 1 + SizeWidth_c;
 
-    signal In_Codeword  : std_logic_vector(CodewordWidth_c - 1 downto 0);
-    signal In_Ready_int : std_logic;
+    -- Encoder ⇄ FIFO
+    signal EncOut_Codeword : std_logic_vector(CodewordWidth_c - 1 downto 0);
+    signal EncOut_Valid    : std_logic;
+    signal EncOut_Ready    : std_logic;
 
-    -- Error-injection latch (write side)
-    signal ErrInj_Pending : std_logic_vector(CodewordWidth_c - 1 downto 0) := (others => '0');
-    signal ErrInj_Active  : std_logic_vector(CodewordWidth_c - 1 downto 0);
-
+    -- FIFO ⇄ decode + output pipeline
     signal Fifo_OutData  : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal Fifo_OutValid : std_logic;
     signal Fifo_OutReady : std_logic;
     signal Fifo_OutLast  : std_logic;
     signal Fifo_OutSize  : std_logic_vector(SizeWidth_c - 1 downto 0);
 
+    -- Combinational decoder outputs
     signal Dec_Data   : std_logic_vector(Width_g - 1 downto 0);
     signal Dec_EccSec : std_logic;
     signal Dec_EccDed : std_logic;
@@ -107,36 +109,28 @@ architecture rtl of olo_ft_fifo_packet is
 
 begin
 
-    In_Ready <= In_Ready_int;
-
-    -- Active flip pattern: newly-loaded if In_ErrInj_Valid='1', else the pending one.
-    ErrInj_Active <= In_ErrInj_BitFlip when In_ErrInj_Valid = '1' else ErrInj_Pending;
-
-    p_pending : process (Clk) is
-    begin
-        if rising_edge(Clk) then
-            if In_Valid = '1' and In_Ready_int = '1' then
-                ErrInj_Pending <= (others => '0');
-            elsif In_ErrInj_Valid = '1' then
-                ErrInj_Pending <= In_ErrInj_BitFlip;
-            end if;
-        end if;
-    end process;
-
-    -- Encode write data (combinational + injection)
+    -- Encoder: codec owns the injection latch. AXI-S handshake propagates user In_Valid/In_Ready
+    -- through to the FIFO's In_Valid/In_Ready.
     i_enc : entity work.olo_ft_ecc_encode
         generic map (
             Width_g    => Width_g,
-            Pipeline_g => 0
+            Pipeline_g => 0,
+            UseReady_g => true
         )
         port map (
-            Clk          => Clk,
-            In_Data      => In_Data,
-            In_BitFlip   => ErrInj_Active,
-            Out_Codeword => In_Codeword
+            Clk            => Clk,
+            Rst            => Rst,
+            In_Valid       => In_Valid,
+            In_Ready       => In_Ready,
+            In_Data        => In_Data,
+            Out_Valid      => EncOut_Valid,
+            Out_Ready      => EncOut_Ready,
+            Out_Codeword   => EncOut_Codeword,
+            ErrInj_BitFlip => In_ErrInj_BitFlip,
+            ErrInj_Valid   => In_ErrInj_Valid
         );
 
-    -- Base FIFO with wider codeword width
+    -- Base packet FIFO with wider codeword width
     i_fifo : entity work.olo_base_fifo_packet
         generic map (
             Width_g            => CodewordWidth_c,
@@ -149,40 +143,50 @@ begin
             MaxPackets_g       => MaxPackets_g
         )
         port map (
-            Clk         => Clk,
-            Rst         => Rst,
-            In_Valid    => In_Valid,
-            In_Ready    => In_Ready_int,
-            In_Data     => In_Codeword,
-            In_Last     => In_Last,
-            In_Drop     => In_Drop,
+            Clk          => Clk,
+            Rst          => Rst,
+            In_Valid     => EncOut_Valid,
+            In_Ready     => EncOut_Ready,
+            In_Data      => EncOut_Codeword,
+            In_Last      => In_Last,
+            In_Drop      => In_Drop,
             In_IsDropped => In_IsDropped,
-            Out_Valid   => Fifo_OutValid,
-            Out_Ready   => Fifo_OutReady,
-            Out_Data    => Fifo_OutData,
-            Out_Size    => Fifo_OutSize,
-            Out_Last    => Fifo_OutLast,
-            Out_Next    => Out_Next,
-            Out_Repeat  => Out_Repeat,
-            PacketLevel => PacketLevel,
-            FreeWords   => FreeWords
+            Out_Valid    => Fifo_OutValid,
+            Out_Ready    => Fifo_OutReady,
+            Out_Data     => Fifo_OutData,
+            Out_Size     => Fifo_OutSize,
+            Out_Last     => Fifo_OutLast,
+            Out_Next     => Out_Next,
+            Out_Repeat   => Out_Repeat,
+            PacketLevel  => PacketLevel,
+            FreeWords    => FreeWords
         );
 
-    -- Combinational decode
+    -- Combinational decoder (Pipeline_g=0). The output pl_stage carries the bundled sideband
+    -- (Sec/Ded/Last/Size) together with the decoded data, so the decoder itself doesn't need
+    -- its own pipeline.
     i_dec : entity work.olo_ft_ecc_decode
         generic map (
             Width_g    => Width_g,
-            Pipeline_g => 0
+            Pipeline_g => 0,
+            UseReady_g => false
         )
         port map (
-            Clk         => Clk,
-            In_Codeword => Fifo_OutData,
-            Out_Data    => Dec_Data,
-            Out_EccSec  => Dec_EccSec,
-            Out_EccDed  => Dec_EccDed
+            Clk            => Clk,
+            Rst            => Rst,
+            In_Valid       => '1',
+            In_Ready       => open,
+            In_Codeword    => Fifo_OutData,
+            Out_Valid      => open,
+            Out_Ready      => '1',
+            Out_Data       => Dec_Data,
+            Out_EccSec     => Dec_EccSec,
+            Out_EccDed     => Dec_EccDed,
+            ErrInj_BitFlip => (others => '0'),
+            ErrInj_Valid   => '0'
         );
 
-    -- Bundle decoded data, error flags, Last and Size for pipeline
+    -- Bundle decoded data + sideband for the output pipeline stage
     Pl_InData <= Dec_EccSec & Dec_EccDed & Fifo_OutLast & Fifo_OutSize & Dec_Data;
 
     -- Pipeline stage with Valid/Ready handshaking (0 stages = passthrough)
