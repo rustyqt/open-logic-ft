@@ -19,13 +19,22 @@ def add_configs(olo_tb):
     :param olo_tb: Testbench library
     """
 
-    ### olo_ft_ecc_encode / olo_ft_ecc_decode ###
-    for tb_name in ['olo_ft_ecc_encode_tb', 'olo_ft_ecc_decode_tb']:
-        tb = olo_tb.test_bench(tb_name)
-        for Width in [8, 16, 32, 64]:
-            named_config(tb, {'Width_g': Width})
-        for Pipeline in [0, 1, 2]:
-            named_config(tb, {'Pipeline_g': Pipeline})
+    ### olo_ft_ecc_encode ###
+    # Encoder Pipeline_g is capped at 0..1 (combinational or one register near output).
+    tb = olo_tb.test_bench('olo_ft_ecc_encode_tb')
+    for Width in [8, 13, 32]:
+        named_config(tb, {'Width_g': Width})
+    for Pipeline in [0, 1]:
+        named_config(tb, {'Pipeline_g': Pipeline})
+
+    ### olo_ft_ecc_decode ###
+    # Decoder Pipeline_g is capped at 0..2 (combinational / register-near-output /
+    # distributed pipeline). Same width sweep as encode.
+    tb = olo_tb.test_bench('olo_ft_ecc_decode_tb')
+    for Width in [8, 13, 32]:
+        named_config(tb, {'Width_g': Width})
+    for Pipeline in [0, 1, 2]:
+        named_config(tb, {'Pipeline_g': Pipeline})
 
     ### olo_ft_ram_tdp ###
     tb = olo_tb.test_bench('olo_ft_ram_tdp_tb')
