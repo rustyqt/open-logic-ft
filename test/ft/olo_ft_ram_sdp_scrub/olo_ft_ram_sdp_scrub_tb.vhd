@@ -224,7 +224,10 @@ begin
     test_runner_watchdog(runner, 5 ms);
 
     p_control : process is
-        variable PassCnt_v : natural;
+        variable PassCnt_v     : natural;
+        variable RdValidCnt_v  : natural;
+        variable MaskFail_v    : boolean;
+        variable EccGateFail_v : boolean;
     begin
         test_runner_setup(runner, runner_cfg);
 
@@ -353,6 +356,138 @@ begin
                          "Latched injection landed on user write under Scrub_Enable='0'");
 
                 Scrub_Enable <= '1';
+
+            -- PassDone must pulse for exactly one cycle. Observe 3 consecutive pulses and check
+            -- Scrub_PassDone is back to '0' on the cycle immediately following each rising edge.
+            elsif run("ScrubPassDonePulseWidth") then
+                for k in 1 to 3 loop
+                    loop
+                        wait until rising_edge(Clk);
+                        exit when Scrub_PassDone = '1';
+                    end loop;
+                    wait until rising_edge(Clk);
+                    check_equal(Scrub_PassDone, '0',
+                                "PassDone pulse width = 1 (pulse " & integer'image(k) & ")");
+                end loop;
+
+            -- With the user idle: Scrub_Valid pulse count = Depth_c per pass, user-facing
+            -- Rd_Valid stays '0' (scrubber-owned reads masked), Scrub_EccSec / Scrub_EccDed
+            -- gated by Scrub_Valid.
+            elsif run("ScrubRdValidIntegrity") then
+                loop
+                    wait until rising_edge(Clk);
+                    exit when Scrub_PassDone = '1';
+                end loop;
+                PassCnt_v     := 0;
+                RdValidCnt_v  := 0;
+                MaskFail_v    := false;
+                EccGateFail_v := false;
+                while PassCnt_v < 2 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_Valid = '1' then
+                        RdValidCnt_v := RdValidCnt_v + 1;
+                    end if;
+                    if Rd_Valid /= '0' then
+                        MaskFail_v := true;
+                    end if;
+                    if (Scrub_EccSec = '1' or Scrub_EccDed = '1') and Scrub_Valid = '0' then
+                        EccGateFail_v := true;
+                    end if;
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                check_equal(RdValidCnt_v, 2 * Depth_c,
+                            "Scrub_Valid pulse count = 2 * Depth_c over 2 passes");
+                check_true(not MaskFail_v,
+                           "User-facing Rd_Valid stays '0' while user is idle (scrubber masking works)");
+                check_true(not EccGateFail_v,
+                           "Scrub_EccSec / Scrub_EccDed only fire while Scrub_Valid is '1'");
+
+            -- SDP-only: hold Wr_Ena='1' to addr 51 while a SEC is planted at addr 50. The
+            -- scrubber's reads keep happening (Rd_Ena='0'); it reaches WriteWait_s for addr 50
+            -- and stays there (IssueWrite gated by User_Wr_PortBusy=Wr_Ena). After release, the
+            -- writeback fires and the SEC is corrected. Exercises the multi-cycle WriteWait_s
+            -- path that is dead code in every other test (which runs with an idle write port).
+            elsif run("ScrubWriteWaitStretch") then
+                writeWithFlip(50, 16#7E#, singleBit(0),
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
+                for i in 1 to 3 * Depth_c loop
+                    wait until rising_edge(Clk);
+                    Wr_Addr <= toUslv(51, Wr_Addr'length);
+                    Wr_Data <= toUslv(i, Width_g);
+                    Wr_Ena  <= '1';
+                end loop;
+                wait until rising_edge(Clk);
+                Wr_Ena  <= '0';
+                Wr_Addr <= (others => '0');
+                Wr_Data <= (others => '0');
+                PassCnt_v := 0;
+                while PassCnt_v < 2 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                checkEcc(50, 16#7E#, '0', '0',
+                         Clk, Rd_Addr, Rd_Ena, Rd_Data, Rd_Valid, Rd_EccSec, Rd_EccDed,
+                         "WriteWait stretch: SEC at addr 50 corrected after Wr_Ena release");
+
+            -- SDP-only: scrubber writeback (Wr port) must work concurrently with a user read
+            -- (Rd port). Trigger off Scrub_Valid + Scrub_EccSec to time the user read onto the
+            -- exact cycle WriteWait_s exits and the writeback fires.
+            elsif run("SdpConcurrentScrubberWriteUserRead") then
+                write(40, 16#42#, Clk, Wr_Addr, Wr_Data, Wr_Ena);
+                writeWithFlip(45, 16#99#, singleBit(0),
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
+                -- Wait for the scrubber to reach Decide_s on the planted SEC. The next FSM
+                -- cycle is WriteWait_s; the cycle after that the writeback fires on the Wr port.
+                loop
+                    wait until rising_edge(Clk);
+                    exit when Scrub_Valid = '1' and Scrub_EccSec = '1';
+                end loop;
+                -- Cycle = WriteWait_s. Drive a user read on the Rd port so the writeback to
+                -- addr 45 (Wr port) and the user read of addr 40 (Rd port) overlap.
+                wait until rising_edge(Clk);
+                Rd_Addr <= toUslv(40, Rd_Addr'length);
+                Rd_Ena  <= '1';
+                wait until rising_edge(Clk);
+                Rd_Ena  <= '0';
+                Rd_Addr <= (others => '0');
+                PassCnt_v := 0;
+                while PassCnt_v < 1 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                checkEcc(45, 16#99#, '0', '0',
+                         Clk, Rd_Addr, Rd_Ena, Rd_Data, Rd_Valid, Rd_EccSec, Rd_EccDed,
+                         "SDP concurrent: SEC at addr 45 corrected concurrently with user read");
+                checkEcc(40, 16#42#, '0', '0',
+                         Clk, Rd_Addr, Rd_Ena, Rd_Data, Rd_Valid, Rd_EccSec, Rd_EccDed,
+                         "SDP concurrent: addr 40 still readable cleanly after concurrent ops");
+
+            -- Address-wrap boundary: SEC at addr 0 (first) and at addr Depth_c - 1 (last,
+            -- where Incr_s wraps and PassDone fires).
+            elsif run("ScrubBoundaryAddresses") then
+                writeWithFlip(0, 16#11#, singleBit(0),
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
+                writeWithFlip(Depth_c - 1, 16#22#, singleBit(1),
+                              Clk, Wr_Addr, Wr_Data, Wr_Ena, ErrInj_BitFlip, ErrInj_Valid);
+                PassCnt_v := 0;
+                while PassCnt_v < 2 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                checkEcc(0, 16#11#, '0', '0',
+                         Clk, Rd_Addr, Rd_Ena, Rd_Data, Rd_Valid, Rd_EccSec, Rd_EccDed,
+                         "Boundary: SEC at addr 0 corrected");
+                checkEcc(Depth_c - 1, 16#22#, '0', '0',
+                         Clk, Rd_Addr, Rd_Ena, Rd_Data, Rd_Valid, Rd_EccSec, Rd_EccDed,
+                         "Boundary: SEC at addr Depth_c - 1 corrected");
 
             end if;
 

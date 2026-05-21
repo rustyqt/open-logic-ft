@@ -225,7 +225,10 @@ begin
     test_runner_watchdog(runner, 5 ms);
 
     p_control : process is
-        variable PassCnt_v : natural;
+        variable PassCnt_v     : natural;
+        variable RdValidCnt_v  : natural;
+        variable MaskFail_v    : boolean;
+        variable EccGateFail_v : boolean;
     begin
         test_runner_setup(runner, runner_cfg);
 
@@ -412,6 +415,83 @@ begin
                          "Latched injection landed on user write under Scrub_Enable='0'");
 
                 Scrub_Enable <= '1';
+
+            -- PassDone must pulse for exactly one cycle. Observe 3 consecutive pulses and check
+            -- Scrub_PassDone is back to '0' on the cycle immediately following each rising edge.
+            -- Catches a class of bugs that leave PassDone stuck high or pulse it for multiple
+            -- cycles -- the existing ScrubPassDone test counts pulses but would silently mask
+            -- such bugs by counting them as "faster than expected".
+            elsif run("ScrubPassDonePulseWidth") then
+                for k in 1 to 3 loop
+                    loop
+                        wait until rising_edge(Clk);
+                        exit when Scrub_PassDone = '1';
+                    end loop;
+                    wait until rising_edge(Clk);
+                    check_equal(Scrub_PassDone, '0',
+                                "PassDone pulse width = 1 (pulse " & integer'image(k) & ")");
+                end loop;
+
+            -- With the user idle: (a) Scrub_Valid must pulse exactly Depth_c times per pass
+            -- (one per address), (b) the user-facing RdValid must stay '0' (scrubber's own
+            -- reads must not pulse it via the wrapper's "Ram_RdValid and not Scrub_Rd_Valid"
+            -- masking), (c) Scrub_EccSec / Scrub_EccDed must be gated by Scrub_Valid (no
+            -- flags outside the Decide_s cycle). None of these three signals was directly
+            -- asserted by the existing tests.
+            elsif run("ScrubRdValidIntegrity") then
+                -- Align: wait for the first PassDone so the count starts at addr 0 of a pass.
+                loop
+                    wait until rising_edge(Clk);
+                    exit when Scrub_PassDone = '1';
+                end loop;
+                PassCnt_v     := 0;
+                RdValidCnt_v  := 0;
+                MaskFail_v    := false;
+                EccGateFail_v := false;
+                while PassCnt_v < 2 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_Valid = '1' then
+                        RdValidCnt_v := RdValidCnt_v + 1;
+                    end if;
+                    if RdValid /= '0' then
+                        MaskFail_v := true;
+                    end if;
+                    if (Scrub_EccSec = '1' or Scrub_EccDed = '1') and Scrub_Valid = '0' then
+                        EccGateFail_v := true;
+                    end if;
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                check_equal(RdValidCnt_v, 2 * Depth_c,
+                            "Scrub_Valid pulse count = 2 * Depth_c over 2 passes");
+                check_true(not MaskFail_v,
+                           "User-facing RdValid stays '0' while user is idle (scrubber masking works)");
+                check_true(not EccGateFail_v,
+                           "Scrub_EccSec / Scrub_EccDed only fire while Scrub_Valid is '1'");
+
+            -- Address-wrap boundary: SEC at addr 0 (first address of every pass) and at
+            -- addr Depth_c - 1 (last address, where Incr_s wraps and PassDone fires on the
+            -- same event). Catches any off-by-one in the wrap arithmetic or in the
+            -- first-address path of a fresh pass.
+            elsif run("ScrubBoundaryAddresses") then
+                writeWithFlip(0, 16#11#, singleBit(0),
+                              Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
+                writeWithFlip(Depth_c - 1, 16#22#, singleBit(1),
+                              Clk, Addr, WrData, WrEna, ErrInj_BitFlip, ErrInj_Valid);
+                PassCnt_v := 0;
+                while PassCnt_v < 2 loop
+                    wait until rising_edge(Clk);
+                    if Scrub_PassDone = '1' then
+                        PassCnt_v := PassCnt_v + 1;
+                    end if;
+                end loop;
+                checkEcc(0, 16#11#, '0', '0',
+                         Clk, Addr, RdEna, RdData, RdValid, RdEccSec, RdEccDed,
+                         "Boundary: SEC at addr 0 corrected");
+                checkEcc(Depth_c - 1, 16#22#, '0', '0',
+                         Clk, Addr, RdEna, RdData, RdValid, RdEccSec, RdEccDed,
+                         "Boundary: SEC at addr Depth_c - 1 corrected");
 
             end if;
 
