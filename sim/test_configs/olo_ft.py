@@ -58,13 +58,17 @@ def add_configs(olo_tb):
         named_config(tb, {'Width_g': Width})
     for EccPipeline in [0, 1]:
         named_config(tb, {'EccPipeline_g': EccPipeline})
-    # Scrub_g=True requires IsAsync_g=False; sweep across read-pipeline depths that change the
-    # scrubber's WaitCnt sizing (TotalReadLatency_c = RamRdLatency_g + EccPipeline_g).
+
+    ### olo_ft_ram_sdp_scrub ###
+    tb = olo_tb.test_bench('olo_ft_ram_sdp_scrub_tb')
+    for RamBehav in ['RBW', 'WBR']:
+        named_config(tb, {'RamBehavior_g': RamBehav})
     for RamRdLatency in [1, 2]:
         for EccPipeline in [0, 1]:
-            named_config(tb, {'Scrub_g': True,
-                              'RamRdLatency_g': RamRdLatency,
+            named_config(tb, {'RamRdLatency_g': RamRdLatency,
                               'EccPipeline_g': EccPipeline})
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
 
     ### olo_ft_ram_sp ###
     tb = olo_tb.test_bench('olo_ft_ram_sp_tb')
@@ -76,6 +80,17 @@ def add_configs(olo_tb):
         named_config(tb, {'Width_g': Width})
     for EccPipeline in [0, 1]:
         named_config(tb, {'EccPipeline_g': EccPipeline})
+
+    ### olo_ft_ram_sp_scrub ###
+    tb = olo_tb.test_bench('olo_ft_ram_sp_scrub_tb')
+    for RamBehav in ['RBW', 'WBR']:
+        named_config(tb, {'RamBehavior_g': RamBehav})
+    for RamRdLatency in [1, 2]:
+        for EccPipeline in [0, 1]:
+            named_config(tb, {'RamRdLatency_g': RamRdLatency,
+                              'EccPipeline_g': EccPipeline})
+    for Width in [8, 16, 32, 64]:
+        named_config(tb, {'Width_g': Width})
 
     ### olo_ft_fifo_sync ###
     tb = olo_tb.test_bench('olo_ft_fifo_sync_tb')

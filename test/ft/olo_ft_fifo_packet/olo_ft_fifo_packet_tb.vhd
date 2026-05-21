@@ -124,7 +124,7 @@ architecture sim of olo_ft_fifo_packet_tb is
 
             wait_until_idle(net, as_sync(AxisMaster_c));
             wait until rising_edge(clk_sig);
-            injBitFlip <= (others => '0');
+            injBitFlip <= (injBitFlip'range => '0');
         else
             push_axi_stream(net, AxisMaster_c, Data_v, tlast => Last_v);
         end if;

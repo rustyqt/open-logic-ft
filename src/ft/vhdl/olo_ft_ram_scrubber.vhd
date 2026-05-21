@@ -20,19 +20,43 @@
 -- authoritative.
 --
 -- Sequence per address (T = read-issue cycle, L = TotalReadLatency_g):
---   T            : assert Scrub_Rd_Ena (only when User_Rd_Ena = '0')
+--   T            : assert Scrub_Rd_Ena (only when User_Rd_PortBusy = '0' and Scrub_Enable = '1')
 --   T .. T+L     : monitor User_Wr_Ena & (User_Wr_Addr = InFlightAddr) -> Collision
 --   T+L          : capture (Ram_Rd_Data, Ram_Rd_EccSec, Ram_Rd_EccDed)
 --   T+L          : if EccDed='1' or EccSec='0' or Collision='1' -> abort (no writeback)
 --                  else move to WriteWait
---   T+L .. T+L+k : wait for (User_Wr_Ena='0'); each cycle still tracks collisions
---   T+L+k        : assert Scrub_Wr_Ena (only if Collision='0' at that point)
+--   T+L .. T+L+k : wait for (User_Wr_PortBusy='0'); each cycle still tracks collisions
+--   T+L+k        : assert Scrub_Wr_Ena (only if Collision='0' and Scrub_Enable='1')
 --   T+L+k+1      : increment ScrubAddr; pulse Scrub_PassDone on rollover
+--
+-- Port-busy vs. collision semantics:
+-- `User_Wr_Ena` is used only for collision detection (does the user actually
+-- modify the in-flight address?). The separate `User_*_PortBusy` inputs gate
+-- when the scrubber is allowed to issue its own read/write. In a SDP setting
+-- the two are identical; in single-port settings they differ (port is busy on
+-- both user reads AND user writes, but only user writes can corrupt data).
+--
+-- Scrub_Enable:
+-- External enable. `Scrub_Enable = '0'` gates `Scrub_Rd_Ena` and `Scrub_Wr_Ena`
+-- low combinationally on the same cycle (no new requests can land on the bus)
+-- and prevents the FSM from starting new operations. Any in-flight read is
+-- allowed to complete its natural FSM cycle so the wrapper's `RdValid` masking
+-- (via `Scrub_Rd_Valid`) stays correct; the writeback is simply suppressed.
+-- The address counter `ScrubAddr` may advance by 1 if disabled mid-cycle (the
+-- in-flight address finishes its pass). Use this to deterministically suspend
+-- scrubbing during ECC error-injection tests.
+--
+-- Scrub_Rd_Valid:
+-- Pulses on the cycle the scrubber's own read returns from the codec (cycle T+L,
+-- i.e. when the FSM is in `Decide_s`). Aligned with `Scrub_EccSec` and
+-- `Scrub_EccDed` so all three can be qualified together by `Scrub_Rd_Valid`.
+-- Wrappers use it to mask the user-facing `Rd_Valid` so scrubber-owned read
+-- cycles do not pulse it. No extra FFs in the scrubber.
 --
 -- The wrapping RAM is responsible for muxing user-vs-scrubber requests onto the
 -- shared write and read ports, encoding the scrubber's `Scrub_Wr_Data` through
--- the ECC encoder, and masking the user-facing `Rd_Valid` on the cycle the
--- scrubber owned the read port.
+-- the ECC encoder, and ANDing `not Scrub_Rd_Valid` into the user-facing
+-- `Rd_Valid` so scrubber-owned read cycles do not pulse it.
 
 ---------------------------------------------------------------------------------------------------
 -- Libraries
@@ -54,27 +78,33 @@ entity olo_ft_ram_scrubber is
         TotalReadLatency_g : positive
     );
     port (
-        Clk            : in    std_logic;
-        Rst            : in    std_logic;
-        -- Snoop user accesses (combinational)
-        User_Wr_Ena    : in    std_logic;
-        User_Wr_Addr   : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        User_Rd_Ena    : in    std_logic;
+        Clk              : in    std_logic;
+        Rst              : in    std_logic;
+        -- External enable. '0' gates new scrubber requests combinationally and prevents the FSM
+        -- from starting new operations. In-flight reads complete naturally; writebacks are
+        -- suppressed. See the description header for details.
+        Scrub_Enable     : in    std_logic;
+        -- Snoop user accesses (combinational). User_Wr_Ena is for collision
+        -- detection only; User_*_PortBusy gate the scrubber's request issuance.
+        User_Wr_Ena      : in    std_logic;
+        User_Wr_Addr     : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        User_Wr_PortBusy : in    std_logic;
+        User_Rd_PortBusy : in    std_logic;
         -- Decoded read return tapped from `olo_ft_ecc_decode.Out_*`
-        Ram_Rd_Data    : in    std_logic_vector(Width_g - 1 downto 0);
-        Ram_Rd_EccSec  : in    std_logic;
-        Ram_Rd_EccDed  : in    std_logic;
+        Ram_Rd_Data      : in    std_logic_vector(Width_g - 1 downto 0);
+        Ram_Rd_EccSec    : in    std_logic;
+        Ram_Rd_EccDed    : in    std_logic;
         -- Scrubber-driven requests (combined with user requests in the wrapper)
-        Scrub_Rd_Ena   : out   std_logic;
-        Scrub_Rd_Addr  : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        Scrub_Wr_Ena   : out   std_logic;
-        Scrub_Wr_Addr  : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
-        Scrub_Wr_Data  : out   std_logic_vector(Width_g - 1 downto 0);
+        Scrub_Rd_Ena     : out   std_logic;
+        Scrub_Rd_Addr    : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        Scrub_Wr_Ena     : out   std_logic;
+        Scrub_Wr_Addr    : out   std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
+        Scrub_Wr_Data    : out   std_logic_vector(Width_g - 1 downto 0);
         -- Status
-        Scrub_Active   : out   std_logic;
-        Scrub_EccSec   : out   std_logic;
-        Scrub_EccDed   : out   std_logic;
-        Scrub_PassDone : out   std_logic
+        Scrub_Rd_Valid   : out   std_logic;
+        Scrub_EccSec     : out   std_logic;
+        Scrub_EccDed     : out   std_logic;
+        Scrub_PassDone   : out   std_logic
     );
 end entity;
 
@@ -98,15 +128,25 @@ architecture rtl of olo_ft_ram_scrubber is
     signal Collision    : std_logic;
     signal CapturedData : std_logic_vector(Width_g - 1 downto 0);
 
-    -- Combinational request flags. User priority is enforced by gating on User_*_Ena so the
-    -- wrapper's mux can simply combine these with the user signals.
+    -- Registered pass-done pulse: drives the output port from a flip-flop instead of a
+    -- combinational decode of the FSM state. One-cycle pulse, delayed by one cycle relative
+    -- to the internal (State=Incr_s and ScrubAddr=Depth_g-1) event.
+    signal Scrub_PassDone_q : std_logic := '0';
+
+    -- Combinational request flags. User priority is enforced by gating on User_*_PortBusy so
+    -- the wrapper's mux can simply combine these with the user signals.
     signal IssueRead    : std_logic;
     signal IssueWrite   : std_logic;
 
 begin
 
-    IssueRead  <= '1' when (State = Idle_s) and (User_Rd_Ena = '0') else '0';
-    IssueWrite <= '1' when (State = WriteWait_s) and (User_Wr_Ena = '0') and (Collision = '0') else '0';
+    IssueRead  <= '1' when (State = Idle_s)
+                        and (User_Rd_PortBusy = '0')
+                        and (Scrub_Enable = '1') else '0';
+    IssueWrite <= '1' when (State = WriteWait_s)
+                        and (User_Wr_PortBusy = '0')
+                        and (Collision = '0')
+                        and (Scrub_Enable = '1') else '0';
 
     p_fsm : process (Clk) is
     begin
@@ -127,8 +167,16 @@ begin
                     if IssueRead = '1' then
                         InFlightAddr <= ScrubAddr;
                         Collision    <= '0';
-                        WaitCnt      <= (others => '0');
-                        State        <= ReadWait_s;
+                        -- WaitCnt starts at 1 (not 0). The transition Idle->ReadWait already
+                        -- consumed cycle T->T+1, so ReadWait only needs to span L-1 more cycles
+                        -- to land in Decide_s on cycle T+L (the same cycle Ram_RdValid pulses).
+                        WaitCnt      <= to_unsigned(1, WaitCnt'length);
+                        if TotalReadLatency_g = 1 then
+                            -- L=1: data is back on T+1, skip ReadWait entirely.
+                            State <= Decide_s;
+                        else
+                            State <= ReadWait_s;
+                        end if;
                     end if;
 
                 when ReadWait_s =>
@@ -143,7 +191,10 @@ begin
                     -- writing it back would silently commit a "valid" codeword over an
                     -- otherwise-detectable double-bit error. Collision means a user write
                     -- already arrived for this address -- their data is authoritative.
-                    if Ram_Rd_EccDed = '0' and Ram_Rd_EccSec = '1' and Collision = '0' then
+                    -- Scrub_Enable='0' also skips the writeback so the FSM unwinds without
+                    -- needing the wrapper to wait for a separate drain.
+                    if Ram_Rd_EccDed = '0' and Ram_Rd_EccSec = '1' and Collision = '0'
+                       and Scrub_Enable = '1' then
                         CapturedData <= Ram_Rd_Data;
                         State        <= WriteWait_s;
                     else
@@ -151,7 +202,9 @@ begin
                     end if;
 
                 when WriteWait_s =>
-                    if Collision = '1' or IssueWrite = '1' then
+                    -- Scrub_Enable='0' is an additional exit condition so the FSM doesn't hang
+                    -- (IssueWrite is gated to '0' forever while disabled).
+                    if Collision = '1' or IssueWrite = '1' or Scrub_Enable = '0' then
                         State <= Incr_s;
                     end if;
 
@@ -183,9 +236,29 @@ begin
     Scrub_Wr_Ena   <= IssueWrite;
     Scrub_Wr_Addr  <= std_logic_vector(InFlightAddr);
     Scrub_Wr_Data  <= CapturedData;
-    Scrub_Active   <= '0' when State = Idle_s else '1';
+    -- Pulses on the cycle the scrubber's own read returns from the codec (aligned to the inner
+    -- RAM/decoder's RdValid AND to Scrub_EccSec/Scrub_EccDed). The wrapper ANDs `not
+    -- Scrub_Rd_Valid` into the user-facing RdValid.
+    Scrub_Rd_Valid <= '1' when State = Decide_s else '0';
     Scrub_EccSec   <= Ram_Rd_EccSec when State = Decide_s else '0';
     Scrub_EccDed   <= Ram_Rd_EccDed when State = Decide_s else '0';
-    Scrub_PassDone <= '1' when (State = Incr_s) and (ScrubAddr = Depth_g - 1) else '0';
+    Scrub_PassDone <= Scrub_PassDone_q;
+
+    -- Register Scrub_PassDone so the output sits in a flip-flop, not in a combinational
+    -- decode of the FSM state. Fires one cycle after the FSM commits the address wrap in
+    -- Incr_s; pulse is still one cycle wide.
+    p_pass_done : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            if (State = Incr_s) and (ScrubAddr = Depth_g - 1) then
+                Scrub_PassDone_q <= '1';
+            else
+                Scrub_PassDone_q <= '0';
+            end if;
+            if Rst = '1' then
+                Scrub_PassDone_q <= '0';
+            end if;
+        end if;
+    end process;
 
 end architecture;
