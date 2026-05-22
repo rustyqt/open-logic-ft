@@ -80,10 +80,12 @@ architecture rtl of olo_ft_ram_tdp is
     signal B_WrCodeword : std_logic_vector(CodewordWidth_c - 1 downto 0);
     signal B_RdCodeword : std_logic_vector(CodewordWidth_c - 1 downto 0);
 
-    -- (not WrEna) shift register on each port, depth = RamRdLatency_g, feeds the corresponding
-    -- decode entity's In_Valid. Decode owns the EccPipeline_g portion via its Out_Valid.
-    signal A_RdEnaPipe : std_logic_vector(1 to RamRdLatency_g) := (others => '0');
-    signal B_RdEnaPipe : std_logic_vector(1 to RamRdLatency_g) := (others => '0');
+    -- Read-valid signals from the inner RAM, one per port. olo_base_ram_tdp drives these high
+    -- on cycles where the corresponding port did not write (i.e. the codeword on *_RdCodeword
+    -- reflects a pure read). Feeds the matching decode entity's In_Valid directly; the decoder
+    -- absorbs EccPipeline_g cycles internally via its Out_Valid.
+    signal A_RamRdValid : std_logic;
+    signal B_RamRdValid : std_logic;
 
 begin
 
@@ -109,22 +111,6 @@ begin
             ErrInj_Valid   => A_ErrInj_Valid
         );
 
-    p_rd_ena_a : process (A_Clk) is
-    begin
-        if rising_edge(A_Clk) then
-            if A_Rst = '1' then
-                A_RdEnaPipe <= (others => '0');
-            else
-                A_RdEnaPipe(1) <= not A_WrEna;
-
-                for i in 2 to RamRdLatency_g loop
-                    A_RdEnaPipe(i) <= A_RdEnaPipe(i - 1);
-                end loop;
-
-            end if;
-        end if;
-    end process;
-
     i_dec_a : entity work.olo_ft_ecc_decode
         generic map (
             Width_g    => Width_g,
@@ -134,7 +120,7 @@ begin
         port map (
             Clk            => A_Clk,
             Rst            => A_Rst,
-            In_Valid       => A_RdEnaPipe(RamRdLatency_g),
+            In_Valid       => A_RamRdValid,
             In_Ready       => open,
             In_Codeword    => A_RdCodeword,
             Out_Valid      => A_RdValid,
@@ -168,22 +154,6 @@ begin
             ErrInj_Valid   => B_ErrInj_Valid
         );
 
-    p_rd_ena_b : process (B_Clk) is
-    begin
-        if rising_edge(B_Clk) then
-            if B_Rst = '1' then
-                B_RdEnaPipe <= (others => '0');
-            else
-                B_RdEnaPipe(1) <= not B_WrEna;
-
-                for i in 2 to RamRdLatency_g loop
-                    B_RdEnaPipe(i) <= B_RdEnaPipe(i - 1);
-                end loop;
-
-            end if;
-        end if;
-    end process;
-
     i_dec_b : entity work.olo_ft_ecc_decode
         generic map (
             Width_g    => Width_g,
@@ -193,7 +163,7 @@ begin
         port map (
             Clk            => B_Clk,
             Rst            => B_Rst,
-            In_Valid       => B_RdEnaPipe(RamRdLatency_g),
+            In_Valid       => B_RamRdValid,
             In_Ready       => open,
             In_Codeword    => B_RdCodeword,
             Out_Valid      => B_RdValid,
@@ -217,16 +187,18 @@ begin
             RamBehavior_g => RamBehavior_g
         )
         port map (
-            A_Clk    => A_Clk,
-            A_Addr   => A_Addr,
-            A_WrEna  => A_WrEna,
-            A_WrData => A_WrCodeword,
-            A_RdData => A_RdCodeword,
-            B_Clk    => B_Clk,
-            B_Addr   => B_Addr,
-            B_WrEna  => B_WrEna,
-            B_WrData => B_WrCodeword,
-            B_RdData => B_RdCodeword
+            A_Clk     => A_Clk,
+            A_Addr    => A_Addr,
+            A_WrEna   => A_WrEna,
+            A_WrData  => A_WrCodeword,
+            A_RdData  => A_RdCodeword,
+            A_RdValid => A_RamRdValid,
+            B_Clk     => B_Clk,
+            B_Addr    => B_Addr,
+            B_WrEna   => B_WrEna,
+            B_WrData  => B_WrCodeword,
+            B_RdData  => B_RdCodeword,
+            B_RdValid => B_RamRdValid
         );
 
 end architecture;
