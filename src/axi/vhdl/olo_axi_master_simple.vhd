@@ -332,7 +332,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.WriteTfGenState := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;
@@ -367,7 +367,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.AwFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;
@@ -424,7 +424,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.WFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;
@@ -516,7 +516,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.ReadTfGenState := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;
@@ -551,7 +551,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.ArFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;

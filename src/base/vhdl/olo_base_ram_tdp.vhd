@@ -50,12 +50,14 @@ entity olo_base_ram_tdp is
         A_WrEna   : in    std_logic                                  := '0';
         A_WrData  : in    std_logic_vector(Width_g - 1 downto 0)     := (others => '0');
         A_RdData  : out   std_logic_vector(Width_g - 1 downto 0);
+        A_RdValid : out   std_logic;
         B_Clk     : in    std_logic;
         B_Addr    : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         B_Be      : in    std_logic_vector(Width_g / 8 - 1 downto 0) := (others => '1');
         B_WrEna   : in    std_logic                                  := '0';
         B_WrData  : in    std_logic_vector(Width_g - 1 downto 0)     := (others => '0');
-        B_RdData  : out   std_logic_vector(Width_g - 1 downto 0)
+        B_RdData  : out   std_logic_vector(Width_g - 1 downto 0);
+        B_RdValid : out   std_logic
     );
 end entity;
 
@@ -66,6 +68,15 @@ architecture rtl of olo_base_ram_tdp is
 
     -- constants
     constant BeCount_c : integer := Width_g / 8;
+
+    -- Read-valid pipelines (one per port, shared across no-BE and BE implementations). Track
+    -- (not WrEna) through RdLatency_g cycles so RdValid is time-aligned with RdData and high
+    -- exactly on cycles where RdData reflects a pure read (not affected by a same-cycle write).
+    signal A_RdValidPipe : std_logic_vector(1 to RdLatency_g) := (others => '0');
+    signal B_RdValidPipe : std_logic_vector(1 to RdLatency_g) := (others => '0');
+
+    attribute shreg_extract of A_RdValidPipe : signal is ShregExtract_SuppressExtraction_c;
+    attribute shreg_extract of B_RdValidPipe : signal is ShregExtract_SuppressExtraction_c;
 
     -- components
     component olo_private_ram_tdp_nobe is
@@ -100,6 +111,26 @@ begin
     assert (Width_g mod 8 = 0) or (not UseByteEnable_g)
         report "olo_base_ram_tdp: Width_g must be a multiple of 8, otherwise byte-enables must be disabled"
         severity error;
+
+    -- Read-valid pipelines (shared across no-BE and BE implementations)
+    p_a_rd_valid : process (A_Clk) is
+    begin
+        if rising_edge(A_Clk) then
+            A_RdValidPipe(1)                <= not A_WrEna;
+            A_RdValidPipe(2 to RdLatency_g) <= A_RdValidPipe(1 to RdLatency_g-1);
+        end if;
+    end process;
+
+    p_b_rd_valid : process (B_Clk) is
+    begin
+        if rising_edge(B_Clk) then
+            B_RdValidPipe(1)                <= not B_WrEna;
+            B_RdValidPipe(2 to RdLatency_g) <= B_RdValidPipe(1 to RdLatency_g-1);
+        end if;
+    end process;
+
+    A_RdValid <= A_RdValidPipe(RdLatency_g);
+    B_RdValid <= B_RdValidPipe(RdLatency_g);
 
     -- No BE Implementation
     g_nobe : if not UseByteEnable_g generate

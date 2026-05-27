@@ -325,7 +325,7 @@ begin
                 end if;
 
             -- coverage off
-            when others => null; -- unreacable code
+            when others => v.RdFsm := Fetch_s; -- unreachable code, safe recovery
             -- coverage on
 
         end case;

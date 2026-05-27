@@ -48,7 +48,9 @@ entity olo_base_ram_sp is
         Be              : in    std_logic_vector(Width_g / 8 - 1 downto 0) := (others => '1');
         WrEna           : in    std_logic                                  := '1';
         WrData          : in    std_logic_vector(Width_g - 1 downto 0);
-        RdData          : out   std_logic_vector(Width_g - 1 downto 0)
+        RdEna           : in    std_logic                                  := '1';
+        RdData          : out   std_logic_vector(Width_g - 1 downto 0);
+        RdValid         : out   std_logic
     );
 end entity;
 
@@ -82,12 +84,28 @@ architecture rtl of olo_base_ram_sp is
         );
     end component;
 
+    -- Read-valid pipeline
+    signal RdValidPipe : std_logic_vector(1 to RdLatency_g) := (others => '0');
+
+    attribute shreg_extract of RdValidPipe : signal is ShregExtract_SuppressExtraction_c;
+
 begin
 
     -- Assertions
     assert (Width_g mod 8 = 0) or (not UseByteEnable_g)
         report "olo_base_ram_sp: Width_g must be a multiple of 8, otherwise byte-enables must be disabled"
         severity error;
+
+    -- Read-valid pipeline (shared across no-BE and BE implementations)
+    p_rd_valid : process (Clk) is
+    begin
+        if rising_edge(Clk) then
+            RdValidPipe(1)                <= RdEna;
+            RdValidPipe(2 to RdLatency_g) <= RdValidPipe(1 to RdLatency_g-1);
+        end if;
+    end process;
+
+    RdValid <= RdValidPipe(RdLatency_g);
 
     -- No BE Implementation
     g_nobe : if not UseByteEnable_g generate

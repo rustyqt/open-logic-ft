@@ -43,7 +43,8 @@ entity olo_base_fifo_async is
         RamBehavior_g   : string                := "RBW";
         ReadyRstState_g : std_logic             := '1';
         Optimization_g  : string                := "SPEED"; -- SPEED or LATENCY
-        SyncStages_g    : positive range 2 to 4 := 2
+        SyncStages_g    : positive range 2 to 4 := 2;
+        FaultTolerant_g : boolean               := false   -- Use TMR-hardened CDC primitives (olo_ft_cc_*)
     );
     port (
         -- Input interface
@@ -295,47 +296,109 @@ begin
     -- Wr -> Rd Sync
     WrAddrGrayIn <= ri_next.WrAddrGray when compareNoCase(Optimization_g, "LATENCY") else ri.WrAddrGray; -- optional register stage
 
-    i_cc_wr_rd : entity work.olo_base_cc_bits
-        generic map (
-            Width_g      => AddrWidth_c,
-            SyncStages_g => SyncStages_g
-        )
-        port map (
-            In_Clk   => In_Clk,
-            In_Rst   => RstInInt,
-            In_Data  => WrAddrGrayIn,
-            Out_Clk  => Out_Clk,
-            Out_Rst  => RstOutInt,
-            Out_Data => WrAddrGray
-        );
+    g_cc_wr_rd_base : if not FaultTolerant_g generate
+
+        i_cc_wr_rd : entity work.olo_base_cc_bits
+            generic map (
+                Width_g      => AddrWidth_c,
+                SyncStages_g => SyncStages_g
+            )
+            port map (
+                In_Clk   => In_Clk,
+                In_Rst   => RstInInt,
+                In_Data  => WrAddrGrayIn,
+                Out_Clk  => Out_Clk,
+                Out_Rst  => RstOutInt,
+                Out_Data => WrAddrGray
+            );
+
+    end generate;
+
+    g_cc_wr_rd_ft : if FaultTolerant_g generate
+
+        i_cc_wr_rd : entity work.olo_ft_cc_bits
+            generic map (
+                Width_g      => AddrWidth_c,
+                SyncStages_g => SyncStages_g
+            )
+            port map (
+                In_Clk   => In_Clk,
+                In_Rst   => RstInInt,
+                In_Data  => WrAddrGrayIn,
+                Out_Clk  => Out_Clk,
+                Out_Rst  => RstOutInt,
+                Out_Data => WrAddrGray
+            );
+
+    end generate;
 
     -- Rd -> Wr Sync
     RdAddrGrayIn <= ro_next.RdAddrGray when compareNoCase(Optimization_g, "LATENCY") else ro.RdAddrGray; -- optional register stage
 
-    i_cc_rd_wr : entity work.olo_base_cc_bits
-        generic map (
-            Width_g      => AddrWidth_c,
-            SyncStages_g => SyncStages_g
-        )
-        port map (
-            In_Clk   => Out_Clk,
-            In_Rst   => RstOutInt,
-            In_Data  => RdAddrGrayIn, -- use unregistered signal because CC contains register
-            Out_Clk  => In_Clk,
-            Out_Rst  => RstInInt,
-            Out_Data => RdAddrGray
-        );
+    g_cc_rd_wr_base : if not FaultTolerant_g generate
+
+        i_cc_rd_wr : entity work.olo_base_cc_bits
+            generic map (
+                Width_g      => AddrWidth_c,
+                SyncStages_g => SyncStages_g
+            )
+            port map (
+                In_Clk   => Out_Clk,
+                In_Rst   => RstOutInt,
+                In_Data  => RdAddrGrayIn, -- use unregistered signal because CC contains register
+                Out_Clk  => In_Clk,
+                Out_Rst  => RstInInt,
+                Out_Data => RdAddrGray
+            );
+
+    end generate;
+
+    g_cc_rd_wr_ft : if FaultTolerant_g generate
+
+        i_cc_rd_wr : entity work.olo_ft_cc_bits
+            generic map (
+                Width_g      => AddrWidth_c,
+                SyncStages_g => SyncStages_g
+            )
+            port map (
+                In_Clk   => Out_Clk,
+                In_Rst   => RstOutInt,
+                In_Data  => RdAddrGrayIn, -- use unregistered signal because CC contains register
+                Out_Clk  => In_Clk,
+                Out_Rst  => RstInInt,
+                Out_Data => RdAddrGray
+            );
+
+    end generate;
 
     -- Reset CC
-    i_rst_cc : entity work.olo_base_cc_reset
-        port map (
-            A_Clk       => In_Clk,
-            A_RstIn     => In_Rst,
-            A_RstOut    => RstInInt,
-            B_Clk       => Out_Clk,
-            B_RstIn     => Out_Rst,
-            B_RstOut    => RstOutInt
-        );
+    g_rst_cc_base : if not FaultTolerant_g generate
+
+        i_rst_cc : entity work.olo_base_cc_reset
+            port map (
+                A_Clk    => In_Clk,
+                A_RstIn  => In_Rst,
+                A_RstOut => RstInInt,
+                B_Clk    => Out_Clk,
+                B_RstIn  => Out_Rst,
+                B_RstOut => RstOutInt
+            );
+
+    end generate;
+
+    g_rst_cc_ft : if FaultTolerant_g generate
+
+        i_rst_cc : entity work.olo_ft_cc_reset
+            port map (
+                A_Clk    => In_Clk,
+                A_RstIn  => In_Rst,
+                A_RstOut => RstInInt,
+                B_Clk    => Out_Clk,
+                B_RstIn  => Out_Rst,
+                B_RstOut => RstOutInt
+            );
+
+    end generate;
 
     Out_RstOut <= RstOutInt;
     In_RstOut  <= RstInInt;

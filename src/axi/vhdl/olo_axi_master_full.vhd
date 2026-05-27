@@ -301,7 +301,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null;    -- unreachable code
+                when others => v.WrCmdFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
 
             end case;
@@ -333,7 +333,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.WrWconvFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
             end case;
 
@@ -398,7 +398,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.WrAlignFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
             end case;
 
@@ -482,7 +482,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null;    -- unreachable code
+                when others => v.RdCmdFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
             end case;
 
@@ -526,7 +526,7 @@ begin
                     end if;
 
                 -- coverage off
-                when others => null; -- unreachable code
+                when others => v.RdDataFsm := Idle_s; -- unreachable code, safe recovery
                 -- coverage on
             end case;
 

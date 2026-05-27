@@ -52,7 +52,8 @@ entity olo_base_ram_sdp is
         Rd_Clk      : in    std_logic                                  := '0';
         Rd_Addr     : in    std_logic_vector(log2ceil(Depth_g) - 1 downto 0);
         Rd_Ena      : in    std_logic                                  := '1';
-        Rd_Data     : out   std_logic_vector(Width_g - 1 downto 0)
+        Rd_Data     : out   std_logic_vector(Width_g - 1 downto 0);
+        Rd_Valid    : out   std_logic
     );
 end entity;
 
@@ -63,6 +64,15 @@ architecture rtl of olo_base_ram_sdp is
 
     -- constants
     constant BeCount_c : integer := Width_g / 8;
+
+    -- Read clock muxing (sync vs async). Mirror of the inner private entity's clock selection.
+    signal RdClkEff : std_logic;
+
+    -- Read-valid pipeline (shared across no-BE and BE implementations). Tracks Rd_Ena through
+    -- RdLatency_g cycles on the read clock so Rd_Valid is time-aligned with Rd_Data.
+    signal RdValidPipe : std_logic_vector(1 to RdLatency_g) := (others => '0');
+
+    attribute shreg_extract of RdValidPipe : signal is ShregExtract_SuppressExtraction_c;
 
     -- components
     component olo_private_ram_sdp_nobe is
@@ -96,6 +106,26 @@ begin
     assert (Width_g mod 8 = 0) or (not UseByteEnable_g)
         report "olo_base_ram_sdp: Width_g must be a multiple of 8, otherwise byte-enables must be disabled"
         severity error;
+
+    -- Read clock selection (matches the private entity's internal clocking)
+    g_sync_rdclk : if not IsAsync_g generate
+        RdClkEff <= Clk;
+    end generate;
+
+    g_async_rdclk : if IsAsync_g generate
+        RdClkEff <= Rd_Clk;
+    end generate;
+
+    -- Read-valid pipeline (shared across no-BE and BE implementations)
+    p_rd_valid : process (RdClkEff) is
+    begin
+        if rising_edge(RdClkEff) then
+            RdValidPipe(1)                <= Rd_Ena;
+            RdValidPipe(2 to RdLatency_g) <= RdValidPipe(1 to RdLatency_g-1);
+        end if;
+    end process;
+
+    Rd_Valid <= RdValidPipe(RdLatency_g);
 
     -- No BE Implementation
     g_nobe : if not UseByteEnable_g generate
